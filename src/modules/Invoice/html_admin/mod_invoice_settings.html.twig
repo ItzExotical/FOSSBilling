@@ -126,7 +126,7 @@
                             <label class="form-check-label" for="radioNo">{{ 'No'|trans }}</label>
                         </div>
                     </div>
-                    <p> If enabled, invoices can be accessed by anyone who knows the invoice hash, although it's quite a long hash and would not be brute-forceable.</p>
+                    <p>{{ "If enabled, invoices can be accessed by anyone who knows the invoice hash, although it's quite a long hash and would not be brute-forceable."|trans }}</p>
                 </div>
             </div>
             <div class="card-body">
@@ -135,7 +135,7 @@
                     <label class="col-md-3 col-form-label">{{ 'Refunds logic'|trans }}</label>
                     <div class="col-md-6">
                         <div class="form-check">
-                            <input class="form-check-input" id="radioNegativeInvoice" type="radio" name="invoice_refund_logic" value="negative_invoice"{% if params.invoice_refund_logic == "1" %} checked{% endif %}>
+                            <input class="form-check-input" id="radioNegativeInvoice" type="radio" name="invoice_refund_logic" value="negative_invoice"{% if params.invoice_refund_logic == "negative_invoice" %} checked{% endif %}>
                             <label class="form-check-label" for="radioNegativeInvoice">{{ 'Negative invoice. Generate refund invoice continuing paid invoices numbering'|trans }}</label>
                         </div>
                         <div class="form-check">

@@ -65,7 +65,7 @@ class Guest extends \Api_Abstract
     /**
      * Format price by currency settings.
      *
-     * @optional bool $convert - covert to default currency rate. Default - true;
+     * @optional bool $convert - convert to default currency rate. Default - true;
      * @optional bool $without_currency - Show only number. No symbols are attached Default - false;
      * @optional float $price - Price to be formatted. Default 0
      * @optional string $code - currency code, ie: USD. Default - default currency
@@ -100,7 +100,7 @@ class Guest extends \Api_Abstract
         return str_replace('{{price}}', $p, $c['format']);
     }
 
-    private function select_format($p, $format)
+    private function select_format($p, $format): string
     {
         return match (intval($format)) {
             2 => number_format($p, 2, '.', ','),

@@ -14,10 +14,19 @@ namespace Box\Mod\Servicehosting;
 use FOSSBilling\Exception;
 use FOSSBilling\InformationException;
 use FOSSBilling\InjectionAwareInterface;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Finder\Finder;
 
 class Service implements InjectionAwareInterface
 {
     protected ?\Pimple\Container $di = null;
+    private readonly Filesystem $filesystem;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -254,10 +263,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return void
-     */
-    public function action_delete(\Model_ClientOrder $order)
+    public function action_delete(\Model_ClientOrder $order): void
     {
         $orderService = $this->di['mod_service']('order');
         $service = $orderService->getOrderService($order);
@@ -270,7 +276,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public function changeAccountPlan(\Model_ClientOrder $order, \Model_ServiceHosting $model, \Model_ServiceHostingHp $hp)
+    public function changeAccountPlan(\Model_ClientOrder $order, \Model_ServiceHosting $model, \Model_ServiceHostingHp $hp): bool
     {
         $model->service_hosting_hp_id = $hp->id;
         if ($this->_performOnService($order)) {
@@ -286,13 +292,13 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function changeAccountUsername(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data)
+    public function changeAccountUsername(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data): bool
     {
         if (!isset($data['username']) || empty($data['username'])) {
             throw new InformationException('Account username is missing or is invalid');
         }
 
-        $u = strtolower($data['username']);
+        $u = strtolower((string) $data['username']);
 
         if ($this->_performOnService($order)) {
             [$adapter, $account] = $this->_getAM($model);
@@ -308,7 +314,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function changeAccountIp(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data)
+    public function changeAccountIp(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data): bool
     {
         if (!isset($data['ip']) || empty($data['ip'])) {
             throw new InformationException('Account IP address is missing or is invalid');
@@ -329,7 +335,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function changeAccountDomain(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data)
+    public function changeAccountDomain(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data): bool
     {
         if (
             !isset($data['tld']) || empty($data['tld'])
@@ -355,7 +361,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function changeAccountPassword(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data)
+    public function changeAccountPassword(\Model_ClientOrder $order, \Model_ServiceHosting $model, $data): bool
     {
         if (
             !isset($data['password']) || !isset($data['password_confirm'])
@@ -379,7 +385,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function sync(\Model_ClientOrder $order, \Model_ServiceHosting $model)
+    public function sync(\Model_ClientOrder $order, \Model_ServiceHosting $model): bool
     {
         [$adapter, $account] = $this->_getAM($model);
         $updated = $adapter->synchronizeAccount($account);
@@ -453,6 +459,8 @@ class Service implements InjectionAwareInterface
         $server_client = new \Server_Client();
         $server_client
             ->setEmail($client->email)
+            ->setFirstName($client->first_name)
+            ->setLastName($client->last_name)
             ->setFullName($client->getFullName())
             ->setCompany($client->company)
             ->setStreet($client->address_1)
@@ -488,7 +496,7 @@ class Service implements InjectionAwareInterface
         return [$adapter, $server_account];
     }
 
-    public function toApiArray(\Model_ServiceHosting $model, $deep = false, $identity = null)
+    public function toApiArray(\Model_ServiceHosting $model, $deep = false, $identity = null): array
     {
         $serviceHostingServerModel = $this->di['db']->load('ServiceHostingServer', $model->service_hosting_server_id);
         $serviceHostingHpModel = $this->di['db']->load('ServiceHostingHp', $model->service_hosting_hp_id);
@@ -527,24 +535,38 @@ class Service implements InjectionAwareInterface
             $result['id'] = $model->id;
             $result['active'] = $model->active;
             $result['secure'] = $model->secure;
-            if (!is_null($model->assigned_ips)) {
-                $result['assigned_ips'] = json_decode($model->assigned_ips, 1);
-            } else {
-                $result['assigned_ips'] = '';
-            }
+            $result['assigned_ips'] = json_decode($model->assigned_ips ?? '', true) ?? '';
             $result['status_url'] = $model->status_url;
             $result['max_accounts'] = $model->max_accounts;
             $result['manager'] = $model->manager;
-            if (!empty($model->config) && json_validate($model->config)) {
-                $result['config'] = json_decode($model->config, true);
-            } else {
-                $result['config'] = [];
-            }
+            $result['config'] = json_decode($model->config ?? '', true) ?? [];
             $result['username'] = $model->username;
             $result['password'] = $model->password;
             $result['accesshash'] = $model->accesshash;
             $result['port'] = $model->port;
             $result['passwordLength'] = $model->passwordLength;
+            $result['created_at'] = $model->created_at;
+            $result['updated_at'] = $model->updated_at;
+        }
+
+        return $result;
+    }
+
+    public function toHostingAccountApiArray(\Model_ServiceHosting $model, $deep = false, $identity = null): array
+    {
+        $result = [
+            'id' => $model->id,
+            'sld' => $model->sld,
+            'tld' => $model->tld,
+            'client_id' => $model->client_id,
+            'server_id' => $model->service_hosting_server_id,
+            'plan_id' => $model->service_hosting_hp_id,
+            'reseller' => $model->reseller,
+        ];
+
+        if ($identity instanceof \Model_Admin) {
+            $result['ip'] = $model->ip;
+            $result['username'] = $model->username;
             $result['created_at'] = $model->created_at;
             $result['updated_at'] = $model->updated_at;
         }
@@ -568,7 +590,7 @@ class Service implements InjectionAwareInterface
 
         if ($data['domain']['action'] == 'owndomain') {
             $sld = $data['domain']['owndomain_sld'];
-            $tld = str_contains($data['domain']['owndomain_tld'], '.') ? $data['domain']['owndomain_tld'] : '.' . $data['domain']['owndomain_tld'];
+            $tld = str_contains((string) $data['domain']['owndomain_tld'], '.') ? $data['domain']['owndomain_tld'] : '.' . $data['domain']['owndomain_tld'];
         }
 
         if ($data['domain']['action'] == 'register') {
@@ -628,23 +650,23 @@ class Service implements InjectionAwareInterface
 
     private function _getServerManagers(): array
     {
-        $dir = PATH_LIBRARY . '/Server/Manager';
         $files = [];
-        $directory = opendir($dir);
-        while ($item = readdir($directory)) {
-            if (($item != '.') && ($item != '..') && ($item != '.svn')) {
-                $files[] = pathinfo($item, PATHINFO_FILENAME);
-            }
+
+        $finder = new Finder();
+        $finder->files()->in(Path::join(PATH_LIBRARY, 'Server', 'Manager'))->name('*.php');
+        $finder->sortByName();
+
+        foreach ($finder as $file) {
+            $files[] = $file->getFilenameWithoutExtension();
         }
-        sort($files);
 
         return $files;
     }
 
     public function getServerManagerConfig($manager)
     {
-        $filename = PATH_LIBRARY . '/Server/Manager/' . $manager . '.php';
-        if (!file_exists($filename)) {
+        $filename = Path::join(PATH_LIBRARY, 'Server', 'Manager', "{$manager}.php");
+        if (!$this->filesystem->exists($filename)) {
             return [];
         }
 
@@ -681,6 +703,23 @@ class Service implements InjectionAwareInterface
         return [$sql, []];
     }
 
+    public function getAccountsSearchQuery($data): array
+    {
+        $sql = 'SELECT * FROM service_hosting';
+        $params = [];
+
+        $serverID = $data['server_id'] ?? null;
+
+        if (!empty($serverID)) {
+            $sql = $sql . ' WHERE service_hosting_server_id = :server_id';
+            $params['server_id'] = $serverID;
+        }
+
+        $sql = $sql . ' ORDER BY id ASC';
+
+        return [$sql, $params];
+    }
+
     public function createServer($name, $ip, $manager, $data)
     {
         $model = $this->di['db']->dispense('ServiceHostingServer');
@@ -688,7 +727,11 @@ class Service implements InjectionAwareInterface
         $model->ip = $ip;
 
         $model->hostname = $data['hostname'] ?? null;
-        $model->assigned_ips = $data['assigned_ips'] ?? null;
+        $assigned_ips = $data['assigned_ips'] ?? '';
+        if (!empty($assigned_ips)) {
+            $model->assigned_ips = self::processAssignedIPs($assigned_ips);
+        }
+
         $model->active = $data['active'] ?? 1;
         $model->status_url = $data['status_url'] ?? null;
         $model->max_accounts = $data['max_accounts'] ?? null;
@@ -732,10 +775,7 @@ class Service implements InjectionAwareInterface
 
         $assigned_ips = $data['assigned_ips'] ?? '';
         if (!empty($assigned_ips)) {
-            $array = explode(PHP_EOL, $data['assigned_ips']);
-            $array = array_map(trim(...), $array);
-            $array = array_diff($array, ['']);
-            $model->assigned_ips = json_encode($array);
+            $model->assigned_ips = self::processAssignedIPs($assigned_ips);
         }
 
         $model->active = $data['active'] ?? $model->active;
@@ -776,11 +816,7 @@ class Service implements InjectionAwareInterface
         $config['host'] = $model->hostname;
         $config['port'] = $model->port;
         $config['config'] = [];
-        if (!empty($model->config) && json_validate($model->config)) {
-            $config['config'] = json_decode($model->config, true);
-        } else {
-            $config['config'] = [];
-        }
+        $config['config'] = json_decode($model->config ?? '', true) ?? [];
         $config['secure'] = $model->secure;
         $config['username'] = $model->username;
         $config['password'] = $model->password;
@@ -790,7 +826,7 @@ class Service implements InjectionAwareInterface
         $manager = $this->di['server_manager']($model->manager, $config);
 
         if (!$manager instanceof \Server_Manager) {
-            throw new Exception('Server manager :adapter is invalid', [':adapter' => $model->manager]);
+            throw new Exception('Server manager :adapter is invalid.', [':adapter' => $model->manager]);
         }
 
         return $manager;
@@ -864,7 +900,7 @@ class Service implements InjectionAwareInterface
             'max_sub' => $model->max_sub,
             'max_park' => $model->max_park,
             'max_addon' => $model->max_addon,
-            'config' => json_decode($model->config, 1),
+            'config' => json_decode($model->config ?? '', true),
 
             'created_at' => $model->created_at,
             'updated_at' => $model->updated_at,
@@ -884,11 +920,7 @@ class Service implements InjectionAwareInterface
         $model->max_park = $data['max_park'] ?? $model->max_park;
 
         /* add new config value to hosting plan */
-        if (!empty($model->config) && json_validate($model->config)) {
-            $config = json_decode($model->config, true);
-        } else {
-            $config = [];
-        }
+        $config = json_decode($model->config ?? '', true) ?? [];
 
         $inConfig = $data['config'] ?? null;
 
@@ -942,9 +974,9 @@ class Service implements InjectionAwareInterface
         return $newId;
     }
 
-    public function getServerPackage(\Model_ServiceHostingHp $model)
+    public function getServerPackage(\Model_ServiceHostingHp $model): \Server_Package
     {
-        $config = json_decode($model->config ?? '', 1);
+        $config = json_decode($model->config ?? '', true);
         if (!is_array($config)) {
             $config = [];
         }
@@ -991,7 +1023,7 @@ class Service implements InjectionAwareInterface
 
             return [$m->getLoginUrl(null), $m->getResellerLoginUrl(null)];
         } catch (\Exception $e) {
-            error_log('Error while retrieving control panel url: ' . $e->getMessage());
+            error_log("Error while retrieving control panel url: {$e->getMessage()}.");
         }
 
         return [false, false];
@@ -1017,11 +1049,7 @@ class Service implements InjectionAwareInterface
         $data['sld'] = $sld;
         $data['tld'] = $tld;
 
-        if (is_string($product->config) && json_validate($product->config)) {
-            $c = json_decode($product->config, true);
-        } else {
-            $c = [];
-        }
+        $c = json_decode($product->config ?? '', true) ?? [];
 
         return array_merge($c, $data);
     }
@@ -1031,11 +1059,7 @@ class Service implements InjectionAwareInterface
         $data = $this->prependOrderConfig($product, $data);
         $product->getService()->validateOrderData($data);
 
-        if (is_string($product->config) && json_validate($product->config)) {
-            $c = json_decode($product->config, true);
-        } else {
-            $c = [];
-        }
+        $c = json_decode($product->config ?? '', true) ?? [];
 
         $dc = $data['domain'];
         $action = $dc['action'];
@@ -1065,12 +1089,7 @@ class Service implements InjectionAwareInterface
 
     public function getFreeTlds(\Model_Product $product): array
     {
-        if (is_string($product->config) && json_validate($product->config)) {
-            $config = json_decode($product->config, true);
-        } else {
-            $config = [];
-        }
-
+        $config = json_decode($product->config ?? '', true) ?? [];
         $freeTlds = $config['free_tlds'] ?? [];
         $result = [];
         foreach ($freeTlds as $tld) {
@@ -1087,5 +1106,33 @@ class Service implements InjectionAwareInterface
         }
 
         return $result;
+    }
+
+    /**
+     * Post-processing for the assigned IPs.
+     * The data from the server management form (/admin/servicehosting/server/{id}) sends the data like this:
+     * assigned_ips: "10.0.0.1\n10.0.0.2\n"
+     * As you see, it isn't really an array, it also doesn't filter out empty lines and whitespaces at all.
+     *
+     * We can't rely on it as-is. So we need to make sure only the valid IP addresses are going inside the array.
+     * We'll split on any type of line break (\n, \r\n, or \r) and make sure each IP address is valid.
+     *
+     * @param string $assigned_ips Raw string from the form data (example form: /admin/servicehosting/server/{ip})
+     *
+     * @return string JSON encoded array of filtered valid IPs
+     */
+    public static function processAssignedIPs(string $assigned_ips): string
+    {
+        // Split the input by any type of line break (\n, \r\n, or \r)
+        $array = preg_split('/\r\n|\r|\n/', $assigned_ips);
+
+        // Trim each entry and remove any empty strings
+        $array = array_map('trim', $array);
+        $array = array_filter($array, fn ($ip): bool => $ip !== '');
+
+        // Validate that each entry is a valid IP address (works both with IPv4 and IPv6)
+        $array = array_filter($array, fn ($ip): mixed => filter_var($ip, FILTER_VALIDATE_IP));
+
+        return json_encode(array_values($array));
     }
 }

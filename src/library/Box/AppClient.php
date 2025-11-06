@@ -12,6 +12,7 @@
 use DebugBar\Bridge\NamespacedTwigProfileCollector;
 use FOSSBilling\Environment;
 use FOSSBilling\TwigExtensions\DebugBar;
+use Symfony\Component\Filesystem\Path;
 use Twig\Extension\ProfilerExtension;
 use Twig\Profiler\Profile;
 
@@ -53,9 +54,9 @@ class Box_AppClient extends Box_App
     public function get_custom_page($page): string
     {
         $ext = $this->ext;
-        if (str_contains($page, '.')) {
-            $ext = substr($page, strpos($page, '.') + 1);
-            $page = substr($page, 0, strpos($page, '.'));
+        if (str_contains((string) $page, '.')) {
+            $ext = substr((string) $page, strpos((string) $page, '.') + 1);
+            $page = substr((string) $page, 0, strpos((string) $page, '.'));
         }
         $page = str_replace('/', '_', $page);
         $tpl = 'mod_page_' . $page;
@@ -64,7 +65,7 @@ class Box_AppClient extends Box_App
             return $this->render($tpl, ['post' => $_POST], $ext);
         } catch (Exception $e) {
             if (DEBUG) {
-                error_log($e);
+                error_log($e->getMessage());
             }
         }
         $e = new FOSSBilling\InformationException('Page :url not found', [':url' => $this->url], 404);
@@ -81,7 +82,7 @@ class Box_AppClient extends Box_App
     public function render($fileName, $variableArray = [], $ext = 'html.twig'): string
     {
         try {
-            $template = $this->getTwig()->load($fileName . '.' . $ext);
+            $template = $this->getTwig()->load(Path::changeExtension($fileName, $ext));
         } catch (Twig\Error\LoaderError $e) {
             $this->di['logger']->setChannel('routing')->info($e->getMessage());
             http_response_code(404);
@@ -89,7 +90,7 @@ class Box_AppClient extends Box_App
             throw new FOSSBilling\InformationException('Page not found', null, 404);
         }
 
-        if ($fileName . '.' . $ext == 'mod_page_sitemap.xml') {
+        if ("{$fileName}.{$ext}" == 'mod_page_sitemap.xml') {
             header('Content-Type: application/xml');
         }
 
@@ -106,7 +107,7 @@ class Box_AppClient extends Box_App
         $loader = new Box_TwigLoader(
             [
                 'mods' => PATH_MODS,
-                'theme' => PATH_THEMES . DIRECTORY_SEPARATOR . $code,
+                'theme' => Path::join(PATH_THEMES, $code),
                 'type' => 'client',
             ]
         );

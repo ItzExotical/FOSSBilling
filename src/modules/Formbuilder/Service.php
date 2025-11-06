@@ -27,7 +27,7 @@ class Service implements InjectionAwareInterface
         return $this->di;
     }
 
-    public function getFormFieldsTypes()
+    public function getFormFieldsTypes(): array
     {
         return [
             'text' => 'Text input',
@@ -38,12 +38,12 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public function typeValidation($type)
+    public function typeValidation($type): bool
     {
         return array_key_exists($type, $this->getFormFieldsTypes());
     }
 
-    public function isArrayUnique($data)
+    public function isArrayUnique($data): bool
     {
         $unique = array_unique($data);
 
@@ -122,10 +122,10 @@ class Service implements InjectionAwareInterface
     private function slugify($text)
     {
         // replace non letter or digits by _
-        $text = preg_replace('~[^\\pL\d]+~u', '_', $text);
+        $text = preg_replace('~[^\\pL\d]+~u', '_', (string) $text);
 
         // trim
-        $text = trim($text, '_');
+        $text = trim((string) $text, '_');
 
         // transliterate
         $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
@@ -136,7 +136,7 @@ class Service implements InjectionAwareInterface
         // remove unwanted characters
         $text = preg_replace('~[^\-\w]+~', '', $text);
 
-        if (is_numeric(substr($text, 0, 1))) {
+        if (is_numeric(substr((string) $text, 0, 1))) {
             throw new \FOSSBilling\InformationException('Field name cannot start with number.', null, 1649);
         }
 
@@ -218,7 +218,7 @@ class Service implements InjectionAwareInterface
         $formModel = $this->di['db']->getExistingModelById('Form', $formId);
         $result = $this->di['db']->toArray($formModel);
 
-        $result['style'] = json_decode($result['style'], true);
+        $result['style'] = json_decode($result['style'] ?? '', true);
         $result['fields'] = $this->getFormFields($result['id']);
         $result['fields'] = $this->fieldsJsonDecode($result['fields']);
 
@@ -240,14 +240,10 @@ class Service implements InjectionAwareInterface
     private function fieldsJsonDecode($fields)
     {
         foreach ($fields as $key => $r) {
-            if (!empty($r['options'])) {
-                $fields[$key]['options'] = json_decode($r['options'], true);
-            } else {
-                $fields[$key]['options'] = [];
-            }
+            $fields[$key]['options'] = json_decode($r['options'] ?? '', true) ?: [];
 
             if (!empty($r['default_value'])) {
-                $fields[$key]['default_value'] = (json_decode($r['default_value'])) ? (json_decode($r['default_value'], true)) : $r['default_value'];
+                $fields[$key]['default_value'] = json_decode($r['default_value'] ?? '', true) ?: $r['default_value'];
             } else {
                 $fields[$key]['default_value'] = '';
             }
@@ -288,14 +284,14 @@ class Service implements InjectionAwareInterface
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $result, null, 2575);
 
-        if (str_starts_with($result['options'], '{') || str_starts_with($result['options'], '[')) {
-            $result['options'] = json_decode($result['options']);
+        if (str_starts_with((string) $result['options'], '{') || str_starts_with((string) $result['options'], '[')) {
+            $result['options'] = json_decode($result['options'] ?? '');
         }
 
         return $result;
     }
 
-    public function removeForm($form_id)
+    public function removeForm($form_id): bool
     {
         $sql = 'DELETE
             FROM form_field
@@ -325,7 +321,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function removeField($data)
+    public function removeField($data): bool
     {
         $fieldModel = $this->di['db']->getExistingModelById('FormField', $data['id'], 'Field was not found');
         $this->di['db']->trash($fieldModel);
@@ -334,7 +330,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function formFieldNameExists($data)
+    public function formFieldNameExists($data): bool
     {
         $form_id = $data['form_id'];
         $field_name = $data['field_name'];
@@ -383,7 +379,7 @@ class Service implements InjectionAwareInterface
         return $new_form_id;
     }
 
-    public function updateFormSettings($data)
+    public function updateFormSettings($data): bool
     {
         $show_title = $data['show_title'] ?? '1';
         $type = $data['type'];

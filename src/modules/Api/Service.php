@@ -43,7 +43,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
             VALUES(:ip, :request, NOW())
         ';
         $values = [
-            'ip' => $request->getClientAddress(),
+            'ip' => $request->getClientIp(),
             'request' => $_SERVER['REQUEST_URI'] ?? null,
         ];
 
@@ -53,10 +53,8 @@ class Service implements \FOSSBilling\InjectionAwareInterface
     /**
      * @param int         $since - timestamp
      * @param string|null $ip
-     *
-     * @return int
      */
-    public function getRequestCount($since, $ip = null, $isLoginMethod = false)
+    public function getRequestCount($since, $ip = null, $isLoginMethod = false): int
     {
         if (!is_numeric($since)) {
             $since = strtotime($since);

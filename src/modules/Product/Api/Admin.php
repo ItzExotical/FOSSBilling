@@ -27,8 +27,8 @@ class Admin extends \Api_Abstract
         $service = $this->getService();
 
         [$sql, $params] = $service->getProductSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $model = $this->di['db']->getExistingModelById('Product', $item['id'], 'Post not found');
             $pager['list'][$key] = $this->getService()->toApiArray($model, false, $this->getIdentity());
@@ -81,7 +81,7 @@ class Admin extends \Api_Abstract
      *
      * @throws \FOSSBilling\Exception
      */
-    public function prepare($data)
+    public function prepare($data): int
     {
         $required = [
             'title' => 'You must specify a title',
@@ -100,7 +100,7 @@ class Admin extends \Api_Abstract
 
         $types = $service->getTypes();
         if (!array_key_exists($data['type'], $types)) {
-            throw new \FOSSBilling\Exception('Product type :type is not registered', [':type' => $data['type']], 413);
+            throw new \FOSSBilling\Exception('Product type :type is not registered.', [':type' => $data['type']], 413);
         }
 
         $categoryId = $data['product_category_id'] ?? null;
@@ -361,7 +361,7 @@ class Admin extends \Api_Abstract
      *
      * @throws \FOSSBilling\Exception
      */
-    public function category_create($data)
+    public function category_create($data): int
     {
         $required = [
             'title' => 'Category title is required',
@@ -406,8 +406,8 @@ class Admin extends \Api_Abstract
     {
         $service = $this->getService();
         [$sql, $params] = $service->getPromoSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $model = $this->di['db']->getExistingModelById('Promo', $item['id'], 'Promo not found');
             $pager['list'][$key] = $this->getService()->toPromoApiArray($model);
@@ -433,7 +433,7 @@ class Admin extends \Api_Abstract
      *
      * @throws \FOSSBilling\Exception
      */
-    public function promo_create($data)
+    public function promo_create($data): int
     {
         $required = [
             'code' => 'Promo code is missing',

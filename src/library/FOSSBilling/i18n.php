@@ -3,7 +3,6 @@
 declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
- * Copyright 2011-2021 BoxBilling, Inc.
  * SPDX-License-Identifier: Apache-2.0.
  *
  * @copyright FOSSBilling (https://www.fossbilling.org)
@@ -11,6 +10,10 @@ declare(strict_types=1);
  */
 
 namespace FOSSBilling;
+
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Finder\Finder;
 
 class i18n
 {
@@ -79,9 +82,9 @@ class i18n
                 return null;
             }
             foreach (self::getLocales() as $locale) {
-                if (str_starts_with($locale, substr($detectedLocale, 0, 2))) {
+                if (str_starts_with((string) $locale, substr($detectedLocale, 0, 2))) {
                     if (!headers_sent()) {
-                        setcookie('BBLANG', $locale, ['expires' => strtotime('+1 month'), 'path' => '/']);
+                        setcookie('BBLANG', (string) $locale, ['expires' => strtotime('+1 month'), 'path' => '/']);
                     }
 
                     return $locale;
@@ -90,7 +93,7 @@ class i18n
         }
 
         if (!headers_sent()) {
-            setcookie('BBLANG', $matchingLocale, ['expires' => strtotime('+1 month'), 'path' => '/']);
+            setcookie('BBLANG', (string) $matchingLocale, ['expires' => strtotime('+1 month'), 'path' => '/']);
         }
 
         return $matchingLocale;
@@ -108,6 +111,7 @@ class i18n
      */
     public static function getLocales(bool $includeLocaleDetails = false, bool $disabled = false): array
     {
+        $filesystem = new Filesystem();
         $locales = self::getLocaleList($disabled);
         if (!$includeLocaleDetails) {
             return $locales;
@@ -115,11 +119,8 @@ class i18n
         $details = [];
 
         // Handle when FOSSBilling is running with a dummy locale folder.
-        if (file_exists(PATH_LANGS . DIRECTORY_SEPARATOR . 'locales.php')) {
-            $array = include PATH_LANGS . DIRECTORY_SEPARATOR . 'locales.php';
-        } else {
-            $array = ['en_US' => 'English'];
-        }
+        $localePhpPath = Path::join(PATH_LANGS, 'locales.php');
+        $array = ($filesystem->exists($localePhpPath)) ? include $localePhpPath : ['en_US' => 'English'];
 
         foreach ($locales as $locale) {
             $title = ($array[$locale] ?? $locale) . " ($locale)";
@@ -144,20 +145,23 @@ class i18n
      */
     public static function toggleLocale(string $locale): bool
     {
-        $basePath = PATH_LANGS . DIRECTORY_SEPARATOR . $locale;
-        if (!is_dir($basePath)) {
+        $filesystem = new Filesystem();
+        $basePath = Path::join(PATH_LANGS, $locale);
+        if (!$filesystem->exists($basePath)) {
             throw new InformationException('Unable to enable / disable the locale as it is not present in the locale folder.');
         }
 
-        $disablePath = $basePath . DIRECTORY_SEPARATOR . '.disabled';
+        $disablePath = Path::join($basePath, '.disabled');
 
         // Reverse the status of the locale
-        if (file_exists($disablePath)) {
-            return unlink($disablePath);
-        } else {
-            file_put_contents($disablePath, '');
+        if ($filesystem->exists($disablePath)) {
+            $filesystem->remove($disablePath);
 
-            return file_exists($disablePath);
+            return true;
+        } else {
+            $filesystem->dumpFile($disablePath, '');
+
+            return $filesystem->exists($disablePath);
         }
     }
 
@@ -171,12 +175,13 @@ class i18n
      */
     public static function getLocaleCompletionPercent(string $locale): int
     {
+        $filesystem = new Filesystem();
         if ($locale === 'en_US') {
             return 100;
         }
 
-        $completionFile = PATH_LANGS . DIRECTORY_SEPARATOR . 'completion.php';
-        if (!file_exists($completionFile)) {
+        $completionFile = Path::join(PATH_LANGS, 'completion.php');
+        if (!$filesystem->exists($completionFile)) {
             return 0;
         }
 
@@ -194,15 +199,15 @@ class i18n
      */
     private static function getLocaleList(bool $disabled = false): array
     {
-        if ($disabled) {
-            // Only get a list of the disabled locales
-            $locales = array_filter(glob(PATH_LANGS . DIRECTORY_SEPARATOR . '*'), fn ($dir): bool => is_dir($dir) && file_exists($dir . DIRECTORY_SEPARATOR . '.disabled'));
-        } else {
-            // Only get a list of the enabled locales
-            $locales = array_filter(glob(PATH_LANGS . DIRECTORY_SEPARATOR . '*'), fn ($dir): bool => is_dir($dir) && !file_exists($dir . DIRECTORY_SEPARATOR . '.disabled'));
-        }
+        $filesystem = new Filesystem();
 
-        $locales = array_map(basename(...), $locales); // get only the directory name
+        $finder = new Finder();
+        $finder->directories()->in(PATH_LANGS)->depth('== 0');
+
+        $locales = iterator_to_array($finder);
+        $locales = ($disabled) ? array_filter($locales, fn ($locale): bool => $filesystem->exists(Path::join($locale->getPathname(), '.disabled')))
+                               : array_filter($locales, fn ($locale): bool => !$filesystem->exists(Path::join($locale->getPathname(), '.disabled')));
+        $locales = array_map(basename(...), $locales);
         sort($locales);
 
         return $locales;

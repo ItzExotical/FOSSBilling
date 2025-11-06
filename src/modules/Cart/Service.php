@@ -34,7 +34,7 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public function getSearchQuery($data)
+    public function getSearchQuery($data): array
     {
         $sql = '
             SELECT cart.id FROM cart
@@ -85,7 +85,7 @@ class Service implements InjectionAwareInterface
         return $cart;
     }
 
-    public function addItem(\Model_Cart $cart, \Model_Product $product, array $data)
+    public function addItem(\Model_Cart $cart, \Model_Product $product, array $data): bool
     {
         $event_params = [...$data, 'cart_id' => $cart->id, 'product_id' => $product->id];
         $this->di['events_manager']->fire(['event' => 'onBeforeProductAddedToCart', 'params' => $event_params]);
@@ -194,7 +194,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function isRecurrentPricing(\Model_Product $model)
+    public function isRecurrentPricing(\Model_Product $model): bool
     {
         $productTable = $model->getTable();
         $pricing = $productTable->getPricingArray($model);
@@ -213,7 +213,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    protected function addProduct(\Model_Cart $cart, \Model_Product $product, array $data)
+    protected function addProduct(\Model_Cart $cart, \Model_Product $product, array $data): bool
     {
         $item = $this->di['db']->dispense('CartProduct');
         $item->cart_id = $cart->id;
@@ -224,7 +224,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function removeProduct(\Model_Cart $cart, $id, $removeAddons = true)
+    public function removeProduct(\Model_Cart $cart, $id, $removeAddons = true): bool
     {
         $bindings = [
             ':cart_id' => $cart->id,
@@ -237,10 +237,16 @@ class Service implements InjectionAwareInterface
         }
 
         if ($removeAddons) {
+            $config_main = json_decode($cartProduct->config ?? '', true);
+            $domain_name = $config_main['domain_name'] ?? '';
             $allCartProducts = $this->di['db']->find('CartProduct', 'cart_id = :cart_id', [':cart_id' => $cart->id]);
             foreach ((array) $allCartProducts as $cProduct) {
-                $config = json_decode($cProduct->config, true);
+                $config = json_decode($cProduct->config ?? '', true);
                 if (isset($config['parent_id']) && $config['parent_id'] == $cartProduct->product_id) {
+                    $domain_name_addon = $config['domain_name'] ?? '';
+                    if ($domain_name && $domain_name != $domain_name_addon) {
+                        continue; // Delete addons only for the domain name
+                    }
                     $this->di['db']->trash($cProduct);
                     $this->di['logger']->info('Removed product addon from shopping cart');
                 }
@@ -254,7 +260,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function changeCartCurrency(\Model_Cart $cart, \Model_Currency $currency)
+    public function changeCartCurrency(\Model_Cart $cart, \Model_Currency $currency): bool
     {
         $cart->currency_id = $currency->id;
         $this->di['db']->store($cart);
@@ -264,7 +270,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function resetCart(\Model_Cart $cart)
+    public function resetCart(\Model_Cart $cart): bool
     {
         $cartProducts = $this->di['db']->find('CartProduct', 'cart_id = :cart_id', [':cart_id' => $cart->id]);
         foreach ($cartProducts as $cartProduct) {
@@ -277,7 +283,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function removePromo(\Model_Cart $cart)
+    public function removePromo(\Model_Cart $cart): bool
     {
         $cart->promo_id = null;
         $cart->updated_at = date('Y-m-d H:i:s');
@@ -288,7 +294,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function applyPromo(\Model_Cart $cart, \Model_Promo $promo)
+    public function applyPromo(\Model_Cart $cart, \Model_Promo $promo): bool
     {
         if ($cart->promo_id == $promo->id) {
             return true;
@@ -306,14 +312,14 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    protected function isEmptyCart(\Model_Cart $cart)
+    protected function isEmptyCart(\Model_Cart $cart): bool
     {
         $cartProducts = $this->di['db']->find('CartProduct', 'cart_id = :cart_id', [':cart_id' => $cart->id]);
 
         return (is_countable($cartProducts) ? count($cartProducts) : 0) == 0;
     }
 
-    public function rm(\Model_Cart $cart)
+    public function rm(\Model_Cart $cart): bool
     {
         $cartProducts = $this->di['db']->find('CartProduct', 'cart_id = :cart_id', [':cart_id' => $cart->id]);
 
@@ -326,7 +332,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function toApiArray(\Model_Cart $model, $deep = false, $identity = null)
+    public function toApiArray(\Model_Cart $model, $deep = false, $identity = null): array
     {
         $products = $this->getCartProducts($model);
 
@@ -375,7 +381,7 @@ class Service implements InjectionAwareInterface
         return !$this->clientHadUsedPromo($client, $promo);
     }
 
-    public function promoCanBeApplied(\Model_Promo $promo)
+    public function promoCanBeApplied(\Model_Promo $promo): bool
     {
         if (!$promo->active) {
             return false;
@@ -398,11 +404,7 @@ class Service implements InjectionAwareInterface
 
     public function isPromoAvailableForClientGroup(\Model_Promo $promo)
     {
-        if (is_string($promo->client_groups) && json_validate($promo->client_groups)) {
-            $clientGroups = json_decode($promo->client_groups, true);
-        } else {
-            $clientGroups = [];
-        }
+        $clientGroups = json_decode($promo->client_groups ?? '', true) ?? [];
 
         if (empty($clientGroups)) {
             return true;
@@ -425,7 +427,7 @@ class Service implements InjectionAwareInterface
         return in_array($client->client_group_id, $clientGroups);
     }
 
-    protected function clientHadUsedPromo(\Model_Client $client, \Model_Promo $promo)
+    protected function clientHadUsedPromo(\Model_Client $client, \Model_Promo $promo): bool
     {
         $sql = 'SELECT id FROM client_order WHERE promo_id = :promo AND client_id = :cid LIMIT 1';
         $promoId = $this->di['db']->getCell($sql, [':promo' => $promo->id, ':cid' => $client->id]);
@@ -459,7 +461,7 @@ class Service implements InjectionAwareInterface
             [
                 'event' => 'onBeforeClientCheckout',
                 'params' => [
-                    'ip' => $this->di['request']->getClientAddress(),
+                    'ip' => $this->di['request']->getClientIp(),
                     'client_id' => $client->id,
                     'cart_id' => $cart->id,
                 ],
@@ -476,7 +478,7 @@ class Service implements InjectionAwareInterface
             [
                 'event' => 'onAfterClientOrderCreate',
                 'params' => [
-                    'ip' => $this->di['request']->getClientAddress(),
+                    'ip' => $this->di['request']->getClientIp(),
                     'client_id' => $client->id,
                     'id' => $order->id,
                 ],
@@ -498,7 +500,7 @@ class Service implements InjectionAwareInterface
         return $result;
     }
 
-    public function createFromCart(\Model_Client $client, $gateway_id = null)
+    public function createFromCart(\Model_Client $client, $gateway_id = null): array
     {
         $cart = $this->getSessionCart();
         $ca = $this->toApiArray($cart);
@@ -675,7 +677,7 @@ class Service implements InjectionAwareInterface
             } catch (\Exception $e) {
                 error_log($e->getMessage());
                 $status = 'error';
-                $notes = 'Order could not be activated after checkout due to error: ' . $e->getMessage();
+                $notes = "Order could not be activated after checkout due to error: {$e->getMessage()}.";
                 $orderService->orderStatusAdd($order, $status, $notes);
             }
         }
@@ -687,7 +689,7 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public function usePromo(\Model_Promo $promo)
+    public function usePromo(\Model_Promo $promo): void
     {
         ++$promo->used;
         $promo->updated_at = date('Y-m-d H:i:s');
@@ -767,14 +769,10 @@ class Service implements InjectionAwareInterface
 
     public function getItemConfig(\Model_CartProduct $model)
     {
-        if (is_string($model->config) && json_validate($model->config)) {
-            return json_decode($model->config, true);
-        }
-
-        return [];
+        return json_decode($model->config ?? '', true) ?? [];
     }
 
-    public function cartProductToApiArray(\Model_CartProduct $model)
+    public function cartProductToApiArray(\Model_CartProduct $model): array
     {
         $product = $this->di['db']->load('Product', $model->product_id);
         $repo = $product->getTable();
@@ -810,7 +808,7 @@ class Service implements InjectionAwareInterface
         ]);
     }
 
-    public function getProductDiscount(\Model_CartProduct $cartProduct, $setup)
+    public function getProductDiscount(\Model_CartProduct $cartProduct, $setup): array
     {
         $cart = $this->di['db']->load('Cart', $cartProduct->cart_id);
         $discount_price = $this->getRelatedItemsDiscount($cart, $cartProduct);

@@ -22,7 +22,6 @@ class Box_BeanHelper extends RedBeanPHP\BeanHelper\SimpleFacadeBeanHelper implem
         return $this->di;
     }
 
-    /** @phpstan-ignore-next-line (No matter what I put for the return type of this function, PHPStan is unhappy) */
     public function getModelForBean(RedBeanPHP\OODBBean $bean): ?object
     {
         $prefix = '\\Model_';
@@ -43,13 +42,13 @@ class Box_BeanHelper extends RedBeanPHP\BeanHelper\SimpleFacadeBeanHelper implem
         return $model;
     }
 
-    private function underscoreToCamelCase($string, $first_char_caps = true)
+    private function underscoreToCamelCase($string, $first_char_caps = true): ?string
     {
         if ($first_char_caps === true) {
-            $string[0] = strtoupper($string[0]);
+            $string[0] = strtoupper((string) $string[0]);
         }
-        $func = fn ($c): string => strtoupper($c[1]);
+        $func = fn ($c): string => strtoupper((string) $c[1]);
 
-        return preg_replace_callback('/_([a-z])/', $func, $string);
+        return preg_replace_callback('/_([a-z])/', $func, (string) $string);
     }
 }

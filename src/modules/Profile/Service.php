@@ -35,7 +35,7 @@ class Service implements InjectionAwareInterface
         return $this->di;
     }
 
-    public function changeAdminPassword(\Model_Admin $admin, $new_password)
+    public function changeAdminPassword(\Model_Admin $admin, $new_password): bool
     {
         $event_params = [];
         $event_params['password'] = $new_password;
@@ -55,7 +55,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function generateNewApiKey(\Model_Admin $admin)
+    public function generateNewApiKey(\Model_Admin $admin): bool
     {
         $event_params = [];
         $event_params['id'] = $admin->id;
@@ -72,7 +72,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function updateAdmin(\Model_Admin $admin, array $data)
+    public function updateAdmin(\Model_Admin $admin, array $data): bool
     {
         $event_params = $data;
         $event_params['id'] = $admin->id;
@@ -93,7 +93,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function getAdminIdentityArray(\Model_Admin $identity)
+    public function getAdminIdentityArray(\Model_Admin $identity): array
     {
         return [
             'id' => $identity->id,
@@ -109,7 +109,7 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public function updateClient(\Model_Client $client, array $data = [])
+    public function updateClient(\Model_Client $client, array $data = []): bool
     {
         $event_params = $data;
         $event_params['id'] = $client->id;
@@ -142,10 +142,15 @@ class Service implements InjectionAwareInterface
         $client->gender = $data['gender'] ?? $client->gender;
 
         $birthday = $data['birthday'] ?? null;
-        if (strlen(trim($birthday)) > 0 && strtotime($birthday) === false) {
+
+        // Special handling for the birthday field
+        if (is_string($birthday) && strlen(trim($birthday)) === 0) {
+            $birthday = null;
+        } elseif ($birthday !== null && strtotime($birthday) === false) {
             throw new \FOSSBilling\InformationException('Invalid birthdate value');
         }
-        $client->birthday = $birthday;
+
+        $client->birthday = $birthday ?? $client->birthday;
 
         $client->company = $data['company'] ?? $client->company;
         $client->company_vat = $data['company_vat'] ?? $client->company_vat;
@@ -201,7 +206,7 @@ class Service implements InjectionAwareInterface
         return $client->api_token;
     }
 
-    public function changeClientPassword(\Model_Client $client, $new_password)
+    public function changeClientPassword(\Model_Client $client, $new_password): bool
     {
         $event_params = [];
         $event_params['password'] = $new_password;
@@ -218,7 +223,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function logoutClient()
+    public function logoutClient(): bool
     {
         $this->di['session']->destroy('client');
         $this->di['logger']->info('Logged out');
@@ -275,7 +280,7 @@ class Service implements InjectionAwareInterface
     private function deleteSessionIfMatching(array $session, string $type, int $id): void
     {
         // Decode the data for the current session and then verify it is for the selected type
-        $data = base64_decode($session['content']);
+        $data = base64_decode((string) $session['content']);
         $stringStart = ($type === 'admin') ? 'admin|' : 'client_id|';
         if (!str_starts_with($data, $stringStart)) {
             return;

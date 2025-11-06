@@ -16,12 +16,20 @@ use Egulias\EmailValidator\EmailValidator;
 use Egulias\EmailValidator\Validation\DNSCheckValidation;
 use Egulias\EmailValidator\Validation\MultipleValidationWithAnd;
 use Egulias\EmailValidator\Validation\RFCValidation;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\RetryableHttpClient;
 
 class Tools
 {
+    private readonly Filesystem $filesystem;
     protected ?\Pimple\Container $di = null;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -35,63 +43,12 @@ class Tools
 
     /**
      * Return site url.
-     *
-     * @return string
      */
-    public function url($link = null)
+    public function url($link = null): string
     {
-        $link = trim($link, '/');
+        $link = trim((string) $link, '/');
 
         return SYSTEM_URL . $link;
-    }
-
-    public function hasService($type)
-    {
-        $file = PATH_MODS . '/mod_' . $type . '/Service.php';
-
-        return file_exists($file);
-    }
-
-    public function getService($type)
-    {
-        $class = 'Box_Mod_' . ucfirst($type) . '_Service';
-        $file = PATH_MODS . '/mod_' . $type . '/Service.php';
-        if (!file_exists($file)) {
-            throw new Exception('Service class :class was not found in :path', [':class' => $class, ':path' => $file]);
-        }
-        require_once $file;
-
-        return new $class();
-    }
-
-    public function checkPerms($path, $perm = '0777')
-    {
-        clearstatcache();
-        $configmod = substr(sprintf('%o', fileperms($path)), -4);
-        $int = (int) $configmod;
-        if ($configmod == $perm) {
-            return true;
-        }
-
-        if ((int) $configmod < (int) $perm) {
-            return true;
-        }
-
-        return false;
-    }
-
-    public function emptyFolder($folder)
-    {
-        /* Original source for this lovely code snippet: https://stackoverflow.com/a/24563703
-         * With modification suggested from KeineMaster (replaced $file with$file->getRealPath())
-         */
-        if (file_exists($folder)) {
-            $di = new \RecursiveDirectoryIterator($folder, \FilesystemIterator::SKIP_DOTS);
-            $ri = new \RecursiveIteratorIterator($di, \RecursiveIteratorIterator::CHILD_FIRST);
-            foreach ($ri as $file) {
-                $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
-            }
-        }
     }
 
     /**
@@ -163,61 +120,31 @@ class Tools
         }
     }
 
-    public function autoLinkText($text)
+    public function slug($str): string
     {
-        $pattern = '#\b(([\w-]+://?|www[.])[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|/)))#';
-        $callback = function ($matches) {
-            $url = array_shift($matches);
-            $url_parts = parse_url($url);
-            if (!isset($url_parts['scheme'])) {
-                $url = 'http://' . $url;
-            }
-
-            return sprintf('<a target="_blank" href="%s">%s</a>', $url, $url);
-        };
-
-        return preg_replace_callback($pattern, $callback, $text);
-    }
-
-    public function getResponseCode($theURL)
-    {
-        $headers = get_headers($theURL);
-
-        return substr($headers[0], 9, 3);
-    }
-
-    public function slug($str)
-    {
-        $str = strtolower(trim($str));
+        $str = strtolower(trim((string) $str));
         $str = preg_replace('/[^a-z0-9-]/', '-', $str);
-        $str = preg_replace('/-+/', '-', $str);
+        $str = preg_replace('/-+/', '-', (string) $str);
 
-        return trim($str, '-');
+        return trim((string) $str, '-');
     }
 
-    public function escape($string)
-    {
-        $string = htmlspecialchars($string, ENT_QUOTES, 'UTF-8');
-
-        return stripslashes($string);
-    }
-
-    public function to_camel_case($str, $capitalize_first_char = false)
+    public function to_camel_case($str, $capitalize_first_char = false): ?string
     {
         if ($capitalize_first_char) {
-            $str[0] = strtoupper($str[0]);
+            $str[0] = strtoupper((string) $str[0]);
         }
-        $func = fn ($c): string => strtoupper($c[1]);
+        $func = fn ($c): string => strtoupper((string) $c[1]);
 
-        return preg_replace_callback('/-([a-z])/', $func, $str);
+        return preg_replace_callback('/-([a-z])/', $func, (string) $str);
     }
 
-    public function from_camel_case($str)
+    public function from_camel_case($str): ?string
     {
-        $str[0] = strtolower($str[0]);
-        $func = fn ($c): string => '-' . strtolower($c[1]);
+        $str[0] = strtolower((string) $str[0]);
+        $func = fn ($c): string => '-' . strtolower((string) $c[1]);
 
-        return preg_replace_callback('/([A-Z])/', $func, $str);
+        return preg_replace_callback('/([A-Z])/', $func, (string) $str);
     }
 
     /**
@@ -247,9 +174,9 @@ class Tools
 
     public function getTable($type)
     {
-        $class = 'Model_' . ucfirst($type) . 'Table';
-        $file = PATH_LIBRARY . '/Model/' . $type . 'Table.php';
-        if (!file_exists($file)) {
+        $class = 'Model_' . ucfirst((string) $type) . 'Table';
+        $file = Path::join(PATH_LIBRARY, 'Model', "{$type}Table.php");
+        if (!$this->filesystem->exists($file)) {
             throw new Exception('Service class :class was not found in :path', [':class' => $class, ':path' => $file]);
         }
         require_once $file;
@@ -315,7 +242,7 @@ class Tools
         $protocol = $_SERVER['HTTPS'] ?? $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? $_SERVER['REQUEST_SCHEME'] ?? '';
 
         // $_SERVER['HTTPS'] will be set to `on` to indicate HTTPS and the others to will be set to `https`, so either one means we are connected via HTTPS.
-        return strcasecmp($protocol, 'on') === 0 || strcasecmp($protocol, 'https') === 0;
+        return strcasecmp((string) $protocol, 'on') === 0 || strcasecmp((string) $protocol, 'https') === 0;
     }
 
     /**
@@ -411,5 +338,26 @@ class Tools
         }
 
         return null;
+    }
+
+    /**
+     * Converts bytes to a human-readable format (B, KB, MB, GB and TB).
+     */
+    public static function humanReadableBytes(int $bytes): string
+    {
+        if ($bytes < 1024) {
+            return $bytes . ' B';
+        }
+        if ($bytes < 1048576) {
+            return round($bytes / 1024, 2) . ' KB';
+        }
+        if ($bytes < 1073741824) {
+            return round($bytes / 1048576, 2) . ' MB';
+        }
+        if ($bytes < 1099511627776) {
+            return round($bytes / 1073741824, 2) . ' GB';
+        }
+
+        return round($bytes / 1099511627776, 2) . ' TB';
     }
 }

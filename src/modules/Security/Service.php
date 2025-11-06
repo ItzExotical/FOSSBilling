@@ -1,5 +1,6 @@
 <?php
 
+declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
  * Copyright 2011-2021 BoxBilling, Inc.
@@ -15,6 +16,8 @@ use FOSSBilling\GeoIP\IncompleteRecord;
 use FOSSBilling\GeoIP\Reader;
 use FOSSBilling\InformationException;
 use FOSSBilling\Interfaces\SecurityCheckInterface;
+use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Finder\Finder;
 
 class Service
 {
@@ -34,7 +37,6 @@ class Service
     {
         return [
             'can_always_access' => true,
-            'hide_permissions' => true,
             'run_checks' => [
                 'type' => 'bool',
                 'display_name' => __trans('Run security checks'),
@@ -51,9 +53,12 @@ class Service
     public function getAllChecks(): array
     {
         $checks = [];
-        foreach (scandir(__DIR__ . DIRECTORY_SEPARATOR . 'Checks') as $check) {
-            $checkID = substr($check, 0, -4) ?: '';
-            $className = "Box\Mod\Security\Checks\\$checkID";
+        $finder = new Finder();
+
+        $finder->files()->in(Path::join(__DIR__, 'Checks'))->name('*.php');
+        foreach ($finder as $file) {
+            $checkID = $file->getFilenameWithoutExtension();
+            $className = "Box\Mod\Security\Checks\\{$checkID}";
             if (!class_exists($className)) {
                 continue;
             }
@@ -62,7 +67,7 @@ class Service
             if ($newCheck instanceof SecurityCheckInterface) {
                 $checks[$checkID] = $newCheck;
             } else {
-                error_log("$className does not implement the SecurityCheckInterface interface.");
+                error_log("{$className} does not implement the SecurityCheckInterface interface.");
             }
         }
 
@@ -123,10 +128,10 @@ class Service
      *
      * @throws \InvalidArgumentException
      */
-    public function lookupIP(string $ip)
+    public function lookupIP(string $ip): array
     {
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            throw new \InvalidArgumentException('The provided input was not a valid IP address');
+            throw new \InvalidArgumentException('The provided input was not a valid IP address.');
         }
 
         try {

@@ -40,7 +40,7 @@ class ServiceTest extends \BBTestCase
         $productModel->loadBean(new \DummyBean());
         $productModel->config = '["hello", "world"]';
         $data = ['testing' => 'phase'];
-        $expected = array_merge(json_decode($productModel->config, 1), $data);
+        $expected = array_merge(json_decode($productModel->config ?? '', true), $data);
 
         $result = $this->service->attachOrderConfig($productModel, $data);
         $this->assertIsArray($result);
@@ -73,7 +73,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 
@@ -104,7 +104,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 
@@ -134,11 +134,11 @@ class ServiceTest extends \BBTestCase
             ->method('store');
         $dbMock->expects($this->exactly(3))
             ->method('findOne')
-            ->will($this->onConsecutiveCalls($serviceLicenseModel, $serviceLicenseModel, null));
+            ->willReturnOnConsecutiveCalls($serviceLicenseModel, $serviceLicenseModel, null);
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 
@@ -172,7 +172,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 
@@ -199,12 +199,12 @@ class ServiceTest extends \BBTestCase
             ->willReturn($serviceLicenseModel);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 
         $this->expectException(\FOSSBilling\Exception::class);
-        $this->expectExceptionMessage(sprintf('License plugin %s was not found', $serviceLicenseModel->plugin));
+        $this->expectExceptionMessage("License plugin {$serviceLicenseModel->plugin} was not found.");
         $this->service->action_activate($clientOrderModel);
     }
 
@@ -222,7 +222,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn(null);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 
@@ -250,7 +250,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
         $this->service->action_delete($clientOrderModel);
@@ -294,7 +294,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn($clientOrderModel);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
         $result = $this->service->isLicenseActive($serviceLicenseModel);
@@ -312,7 +312,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn(null);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
         $result = $this->service->isLicenseActive($serviceLicenseModel);
@@ -580,7 +580,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn($clientOrderModel);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderServiceMock);
 
         $this->service->setDi($di);
 

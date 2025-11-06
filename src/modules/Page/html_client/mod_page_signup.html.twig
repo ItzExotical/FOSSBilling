@@ -26,7 +26,7 @@
                 {% endif %}
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="text-center m-4">{{ 'Create a new account'|trans }}</h5>
+                        <h1 class="text-center m-4">{{ 'Create a new account'|trans }}</h1>
                         <form class="api-form auth" action="{{ 'api/guest/client/create'|link }}" method="post" data-api-redirect="{{ '/'|link }}">
                             <input type="hidden" name="CSRFToken" value="{{ CSRFToken }}"/>
                             {% set r = guest.client_required %}
@@ -108,7 +108,7 @@
                                     <select class="form-select" id="country" name="country" required="required">
                                         <option value="">{{ '-- Select country --'|trans }}</option>
                                         {% for val,label in guest.system_countries %}
-                                            <option value="{{ val }}" label="{{ label|e }}">{{ label|e }}</option>
+                                            <option value="{{ val }}" label="{{ label|e }}" {% if guest.system_default_country == val %}selected{% endif %}>{{ label|e }}</option>
                                         {% endfor %}
                                     </select>
                                 </div>
@@ -149,7 +149,7 @@
                                         <label class="form-label"
                                                for="{{ field_name }}">{{ field.title is not empty ? field.title : field_name | capitalize }}</label>
                                         <input class="form-control" id="{{ field_name }}" type="text"
-                                               name="{{ field_name }}" value="{{ attribute(request, field_name) }}"
+                                               name="{{ field_name }}" value="{{ request.(field_name) }}"
                                                {% if field.required %}required="required"{% endif %} />
                                     </div>
                                 {% endif %}

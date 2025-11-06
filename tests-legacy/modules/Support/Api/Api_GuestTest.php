@@ -23,8 +23,7 @@ class Api_GuestTest extends \BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;
@@ -53,8 +52,7 @@ class Api_GuestTest extends \BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;
@@ -87,8 +85,7 @@ class Api_GuestTest extends \BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;
@@ -111,12 +108,11 @@ class Api_GuestTest extends \BBTestCase
         $serviceMock->expects($this->atLeastOnce())->method('publicFindOneByHash')
             ->willReturn(new \Model_SupportPTicket());
         $serviceMock->expects($this->atLeastOnce())->method('publicCloseTicket')
-            ->willReturn([]);
+            ->willReturn(true);
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;
@@ -129,7 +125,7 @@ class Api_GuestTest extends \BBTestCase
         ];
         $result = $this->guestApi->ticket_close($data);
 
-        $this->assertIsArray($result);
+        $this->assertTrue($result);
     }
 
     public function testTicketReply(): void
@@ -139,12 +135,11 @@ class Api_GuestTest extends \BBTestCase
         $serviceMock->expects($this->atLeastOnce())->method('publicFindOneByHash')
             ->willReturn(new \Model_SupportPTicket());
         $serviceMock->expects($this->atLeastOnce())->method('publicTicketReplyForGuest')
-            ->willReturn([]);
+            ->willReturn(true);
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;
@@ -158,7 +153,7 @@ class Api_GuestTest extends \BBTestCase
         ];
         $result = $this->guestApi->ticket_reply($data);
 
-        $this->assertIsArray($result);
+        $this->assertTrue($result);
     }
 
     /*
@@ -183,9 +178,12 @@ class Api_GuestTest extends \BBTestCase
             ->willReturn($willReturn);
         $guestApi->setService($supportService);
 
-        $pagerMock = $this->getMockBuilder('Box_Pagination')->getMock();
+        $pagerMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getDefaultPerPage'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pagerMock->expects($this->atLeastOnce())
-            ->method('getPer_page')
+            ->method('getDefaultPerPage')
             ->willReturn(100);
         $di = new \Pimple\Container();
         $di['pager'] = $pagerMock;
@@ -212,8 +210,7 @@ class Api_GuestTest extends \BBTestCase
             ->method('kbFindActiveArticleBySlug')
             ->willReturn(new \Model_SupportKbArticle());
         $supportService->expects($this->atLeastOnce())
-            ->method('kbHitView')
-            ->willReturn(new \Model_SupportKbArticle());
+            ->method('kbHitView');
         $supportService->expects($this->atLeastOnce())
             ->method('kbToApiArray')
             ->willReturn([]);
@@ -242,8 +239,7 @@ class Api_GuestTest extends \BBTestCase
             ->method('kbFindActiveArticleBySlug')
             ->willReturn(new \Model_SupportKbArticle());
         $supportService->expects($this->atLeastOnce())
-            ->method('kbHitView')
-            ->willReturn(new \Model_SupportKbArticle());
+            ->method('kbHitView');
         $supportService->expects($this->atLeastOnce())
             ->method('kbToApiArray')
             ->willReturn([]);
@@ -268,8 +264,7 @@ class Api_GuestTest extends \BBTestCase
             ->method('kbFindActiveArticleBySlug')
             ->willReturn(new \Model_SupportKbArticle());
         $kbService->expects($this->never())
-            ->method('kbHitView')
-            ->willReturn(new \Model_SupportKbArticle());
+            ->method('kbHitView');
         $kbService->expects($this->never())
             ->method('kbToApiArray')
             ->willReturn([]);
@@ -292,8 +287,7 @@ class Api_GuestTest extends \BBTestCase
             ->method('kbFindActiveArticleBySlug')
             ->willReturn(new \Model_SupportKbArticle());
         $kbService->expects($this->never())
-            ->method('kbHitView')
-            ->willReturn(new \Model_SupportKbArticle());
+            ->method('kbHitView');
         $kbService->expects($this->never())
             ->method('kbToApiArray')
             ->willReturn([]);
@@ -323,8 +317,7 @@ class Api_GuestTest extends \BBTestCase
             ->method('kbFindActiveArticleBySlug')
             ->willReturn(null);
         $kbService->expects($this->never())
-            ->method('kbHitView')
-            ->willReturn(new \Model_SupportKbArticle());
+            ->method('kbHitView');
         $kbService->expects($this->never())
             ->method('kbToApiArray')
             ->willReturn([]);
@@ -355,20 +348,23 @@ class Api_GuestTest extends \BBTestCase
             'list' => [],
         ];
 
-        $pager = $this->getMockBuilder('Box_Pagination')->getMock();
+        $kbService = $this->getMockBuilder(\Box\Mod\Support\Service::class)->onlyMethods(['kbCategoryGetSearchQuery'])->getMock();
+        $kbService->expects($this->atLeastOnce())
+            ->method('kbCategoryGetSearchQuery')
+            ->willReturn(['String', []]);
+
+        $pager = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+            ->onlyMethods(['getPaginatedResultSet'])
+            ->getMock();
+
         $pager->expects($this->atLeastOnce())
-            ->method('getAdvancedResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn($willReturn);
 
         $di = new \Pimple\Container();
         $di['pager'] = $pager;
 
         $guestApi->setDi($di);
-
-        $kbService = $this->getMockBuilder(\Box\Mod\Support\Service::class)->onlyMethods(['kbCategoryGetSearchQuery'])->getMock();
-        $kbService->expects($this->atLeastOnce())
-            ->method('kbCategoryGetSearchQuery')
-            ->willReturn(true);
         $guestApi->setService($kbService);
 
         $result = $guestApi->kb_category_get_list([]);

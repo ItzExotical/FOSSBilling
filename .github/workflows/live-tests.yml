@@ -20,11 +20,12 @@ env:
 jobs:
   fresh-install:
     runs-on: ubuntu-latest
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.repo.id != github.event.pull_request.head.repo.id) || github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: 'PHP Build'
-        uses: FOSSBilling/.workflows/.github/actions/php-build@3e9ace8872ed7d0961a73e7677d19cd9f58846df
+        uses: FOSSBilling/.workflows/.github/actions/php-build@5effb8054706bc16b98d16bafb5ba540d6d1bc95
         with:
           cache-deps: 'true'
           composer-args: '--prefer-dist --optimize-autoloader'
@@ -37,32 +38,32 @@ jobs:
 
       - name: Cache Built Admin Theme
         id: cache-admin_default
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ./src/themes/admin_default/build
           key: admin_default-${{ hashFiles('./package-lock.json', './src/themes/admin_default/assets/fossbilling.js', './src/themes/admin_default/assets/scss/*.scss', './src/themes/admin_default/assets/js/*.js', './src/themes/admin_default/assets/js/ui/*.js') }}
 
       - name: Cache Built Huraga Theme
         id: cache-huraga
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ./src/themes/huraga/build
           key: huraga-${{ hashFiles('./package-lock.json', './src/themes/huraga/assets/huraga.js', './src/themes/huraga/assets/scss/*.scss') }}
 
       - name: 'Install Node.js and Enable Caching'
-        if: steps.cache-admin_default.outputs.cache-hit != 'true' && steps.cache-huraga.outputs.cache-hit != 'true'
-        uses: actions/setup-node@v4
+        if: steps.cache-admin_default.outputs.cache-hit != 'true' || steps.cache-huraga.outputs.cache-hit != 'true'
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6
         with:
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
-          node-version: 20
+          node-version: 24
 
       - name: 'Install Node.js Dependencies'
-        if: steps.cache-admin_default.outputs.cache-hit != 'true' && steps.cache-huraga.outputs.cache-hit != 'true'
+        if: steps.cache-admin_default.outputs.cache-hit != 'true' || steps.cache-huraga.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: 'Build Frontend Assets'
-        if: steps.cache-admin_default.outputs.cache-hit != 'true' && steps.cache-huraga.outputs.cache-hit != 'true'
+        if: steps.cache-admin_default.outputs.cache-hit != 'true' || steps.cache-huraga.outputs.cache-hit != 'true'
         run: npm run build
 
       - name: 'Download Latest Translations'
@@ -81,7 +82,7 @@ jobs:
         run: sudo systemctl start mysql.service
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2
         with:
           php-version: '8.3'
           extensions: imagick, gd, intl, xml, dom, curl, iconv, json, opcache, mbstring, bz2, simplexml, pdo, pdo_mysql
@@ -89,7 +90,10 @@ jobs:
       - name: Setup Apache
         run: |
           sudo apt-get update
-          sudo apt-get install libapache2-mod-php8.3
+          sudo apt-get install --no-install-recommends \
+            libapache2-mod-php8.3 php8.3 php8.3-common php8.3-intl \
+            php8.3-mysql php8.3-xml php8.3-curl php8.3-fpm php8.3-mbstring \
+            php8.3-opcache php8.3-gd
           sudo a2enmod php8.3
           sudo systemctl start apache2
           sudo a2enmod rewrite
@@ -171,10 +175,16 @@ jobs:
       - name: Run the API test suite
         run: php ./src/vendor/bin/phpunit --configuration phpunit-live.xml
 
-      - name: Display the FOSSBilling PHP error log
+      - name: Display the FOSSBilling PHP error log, if it exists
         if: always()
-        run: cat /var/www/localhost/data/log/php_error.log
-
+        run: |
+          PHP_ERROR_LOG_PATH="/var/www/localhost/data/log/php_error.log"
+            
+          if [ -f "$PHP_ERROR_LOG_PATH" ]; then
+            cat "$PHP_ERROR_LOG_PATH"
+          else
+            echo "The PHP error log does not exist."
+          fi
       - name: Display the other FOSSBilling logs
         if: always()
         working-directory: /var/www/localhost/data/log/

@@ -12,13 +12,17 @@
 namespace Box\Mod\Invoice;
 
 use Dompdf\Dompdf;
+use FOSSBilling\Environment;
 use FOSSBilling\InformationException;
 use FOSSBilling\InjectionAwareInterface;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 use Twig\Loader\FilesystemLoader;
 
 class Service implements InjectionAwareInterface
 {
     protected ?\Pimple\Container $di = null;
+    private readonly Filesystem $filesystem;
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -30,7 +34,12 @@ class Service implements InjectionAwareInterface
         return $this->di;
     }
 
-    public function getSearchQuery($data)
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
+
+    public function getSearchQuery($data): array
     {
         $sql = 'SELECT p.*
             FROM invoice p
@@ -85,12 +94,12 @@ class Service implements InjectionAwareInterface
             $params['currency'] = $currency;
         }
 
-        if ($client_id !== null) {
+        if ($client_id) {
             $sql .= ' AND p.client_id = :client_id';
             $params['client_id'] = $client_id;
         }
 
-        if ($client !== null) {
+        if ($client) {
             $sql .= ' AND (cl.first_name LIKE :client_search OR cl.last_name LIKE :client_search OR cl.id = :client OR cl.email = :client)';
             $params['client_search'] = $client . '%';
             $params['client'] = $client;
@@ -98,27 +107,27 @@ class Service implements InjectionAwareInterface
 
         if ($created_at) {
             $sql .= " AND DATE_FORMAT(p.created_at, '%Y-%m-%d') = :created_at";
-            $params['created_at'] = date('Y-m-d', strtotime($created_at));
+            $params['created_at'] = date('Y-m-d', (int) strtotime((string) $created_at));
         }
 
         if ($date_from) {
             $sql .= ' AND UNIX_TIMESTAMP(p.created_at) >= :date_from';
-            $params['date_from'] = strtotime($date_from);
+            $params['date_from'] = strtotime((string) $date_from);
         }
 
         if ($date_to) {
             $sql .= ' AND UNIX_TIMESTAMP(p.created_at) <= :date_to';
-            $params['date_to'] = strtotime($date_to);
+            $params['date_to'] = strtotime((string) $date_to);
         }
 
         if ($paid_at) {
             $sql .= " AND DATE_FORMAT(p.paid_at, '%Y-%m-%d') = :paid_at";
-            $params['paid_at'] = date('Y-m-d', strtotime($paid_at));
+            $params['paid_at'] = date('Y-m-d', (int) strtotime((string) $paid_at));
         }
 
         if ($search) {
             $sql .= ' AND (p.id = :int OR p.nr LIKE :search_like OR p.id LIKE :search OR pi.title LIKE :search_like)';
-            $params['int'] = (int) preg_replace('/[^0-9]/', '', $search);
+            $params['int'] = (int) preg_replace('/[^0-9]/', '', (string) $search);
             $params['search_like'] = '%' . $search . '%';
             $params['search'] = $search;
         }
@@ -130,22 +139,23 @@ class Service implements InjectionAwareInterface
 
     public function toApiArray(\Model_Invoice $invoice, $deep = true, $identity = null): array
     {
-        $this->checkInvoiceAuth($invoice->client_id);
-
         $row = $this->di['db']->toArray($invoice);
 
         $items = $this->di['db']->find('InvoiceItem', 'invoice_id = :iid', ['iid' => $row['id']]);
-
         $lines = [];
-        $total = $tax_total = 0;
-        $invoiceItemService = $this->di['mod_service']('Invoice', 'InvoiceItem');
+        $total = 0;
+        $taxable_subtotal = 0;
+
         foreach ($items as $item) {
             $order_id = ($item->type == \Model_InvoiceItem::TYPE_ORDER) ? $item->rel_id : null;
 
             $line_total = $item->price * $item->quantity;
             $total += $line_total;
-            $line_tax = $invoiceItemService->getTax($item) * $item->quantity;
-            $tax_total += $line_tax;
+
+            if ($item->taxed) {
+                $taxable_subtotal += $line_total;
+            }
+
             $line = [
                 'id' => $item->id,
                 'title' => $item->title,
@@ -153,7 +163,7 @@ class Service implements InjectionAwareInterface
                 'quantity' => $item->quantity,
                 'unit' => $item->unit,
                 'price' => $item->price,
-                'tax' => $line_tax,
+                'tax' => 0, // Tax will be calculated on the total taxable subtotal
                 'taxed' => $item->taxed,
                 'charged' => $item->charged,
                 'total' => $line_total,
@@ -165,7 +175,13 @@ class Service implements InjectionAwareInterface
             ];
             $lines[] = $line;
         }
-        $tax = $tax_total;
+
+        $current_invoice_tax_rate = $row['taxrate'];
+        if ($current_invoice_tax_rate > 0 && $taxable_subtotal != 0) {
+            $tax = round($taxable_subtotal * $current_invoice_tax_rate / 100, 2);
+        } else {
+            $tax = 0;
+        }
 
         $invoice_number_padding = $this->di['mod_service']('system')->getParamValue('invoice_number_padding');
         $invoice_number_padding = $invoice_number_padding !== null && $invoice_number_padding !== '' ? $invoice_number_padding : 5;
@@ -263,7 +279,7 @@ class Service implements InjectionAwareInterface
         return $result;
     }
 
-    public static function onAfterAdminInvoicePaymentReceived(\Box_Event $event)
+    public static function onAfterAdminInvoicePaymentReceived(\Box_Event $event): bool
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -287,7 +303,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public static function onAfterAdminInvoiceApprove(\Box_Event $event)
+    public static function onAfterAdminInvoiceApprove(\Box_Event $event): bool
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -309,7 +325,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public static function onAfterAdminInvoiceReminderSent(\Box_Event $event)
+    public static function onAfterAdminInvoiceReminderSent(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -329,7 +345,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterAdminCronRun(\Box_Event $event)
+    public static function onAfterAdminCronRun(\Box_Event $event): void
     {
         $di = $event->getDi();
         $systemService = $di['mod_service']('System');
@@ -342,7 +358,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onEventAfterInvoiceIsDue(\Box_Event $event)
+    public static function onEventAfterInvoiceIsDue(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -369,7 +385,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public function markAsPaid(\Model_Invoice $invoice, $charge = true, $execute = false)
+    public function markAsPaid(\Model_Invoice $invoice, $charge = true, $execute = false): bool
     {
         if ($invoice->status == \Model_Invoice::STATUS_PAID) {
             return true;
@@ -401,14 +417,32 @@ class Service implements InjectionAwareInterface
                 try {
                     $invoiceItemService->executeTask($item);
                 } catch (\Exception $e) {
-                    error_log($e);
+                    error_log($e->getMessage());
                 }
             }
         }
 
-        $this->di['logger']->info('Marked invoice "%s" as paid', $invoice->id);
+        $this->di['logger']->info("Marked invoice {$invoice->id} as paid.");
 
         return true;
+    }
+
+    /**
+     * Finds all paid invoices associated with a given client order.
+     *
+     * @param \Model_ClientOrder $order the client order for which to find paid invoices
+     *
+     * @return array An array of paid invoices. Each element in the array represents an invoice record
+     *               as returned by the database, typically as an associative array or an object.
+     */
+    public function findPaidInvoicesForOrder(\Model_ClientOrder $order): array
+    {
+        $bindings = [
+            ':rel_id' => $order->id,
+            ':status' => \Model_Invoice::STATUS_PAID,
+        ];
+
+        return $this->di['db']->find('Invoice', 'id IN (SELECT invoice_id FROM invoice_item WHERE rel_id = :rel_id) AND status = :status', $bindings);
     }
 
     public function getNextInvoiceNumber()
@@ -431,7 +465,7 @@ class Service implements InjectionAwareInterface
         return $next_nr;
     }
 
-    public function countIncome(\Model_Invoice $invoice)
+    public function countIncome(\Model_Invoice $invoice): void
     {
         $table = $this->di['mod_service']('Currency');
 
@@ -447,7 +481,7 @@ class Service implements InjectionAwareInterface
             $currency = $currencyService->getDefault();
             $client->currency = $currency->code;
             $this->di['db']->store($client);
-            error_log(sprintf('Client #%s currency was not defined. Set default currency %s', $client->id, $currency->code));
+            error_log("Client #{$client->id} currency was not defined. Set default currency {$currency->code}.");
         }
 
         $model = $this->di['db']->dispense('Invoice');
@@ -472,12 +506,12 @@ class Service implements InjectionAwareInterface
             }
         }
 
-        $this->di['logger']->info('Prepared new invoice "%s"', $invoiceId);
+        $this->di['logger']->info("Prepared new invoice {$invoiceId}.");
 
         if (isset($data['approve']) && $data['approve']) {
             try {
                 $this->approveInvoice($model, ['id' => $invoiceId]);
-                $this->di['logger']->info('Approved invoice %s instantly', $invoiceId);
+                $this->di['logger']->info("Approved invoice {$invoiceId} instantly.");
             } catch (\Exception $e) {
                 error_log($e->getMessage());
             }
@@ -486,7 +520,7 @@ class Service implements InjectionAwareInterface
         return $model;
     }
 
-    public function setInvoiceDefaults(\Model_Invoice $model)
+    public function setInvoiceDefaults(\Model_Invoice $model): void
     {
         $clientService = $this->di['mod_service']('Client');
         $systemService = $this->di['mod_service']('system');
@@ -498,7 +532,7 @@ class Service implements InjectionAwareInterface
         $model->seller_company = $seller['name'];
         $model->seller_company_vat = $seller['vat_number'];
         $model->seller_company_number = $seller['number'];
-        $model->seller_address = trim($seller['address_1'] . ' ' . $seller['address_2'] . ' ' . $seller['address_3']);
+        $model->seller_address = trim("{$seller['address_1']} {$seller['address_2']} {$seller['address_3']}");
         $model->seller_phone = $seller['tel'];
         $model->seller_email = $seller['email'];
 
@@ -507,11 +541,11 @@ class Service implements InjectionAwareInterface
         $model->buyer_company = $buyer['company'];
         $model->buyer_company_vat = $buyer['company_vat'];
         $model->buyer_company_number = $buyer['company_number'];
-        $model->buyer_address = $buyer['address_1'] . ' ' . $buyer['address_2'];
+        $model->buyer_address = "{$buyer['address_1']} {$buyer['address_2']}";
         $model->buyer_city = $buyer['city'];
         $model->buyer_state = $buyer['state'];
         $model->buyer_country = $buyer['country'];
-        $model->buyer_phone = $buyer['phone_cc'] . ' ' . $buyer['phone'];
+        $model->buyer_phone = "{$buyer['phone_cc']} {$buyer['phone']}";
         $model->buyer_email = $buyer['email'];
         $model->buyer_zip = $buyer['postcode'];
 
@@ -519,7 +553,7 @@ class Service implements InjectionAwareInterface
         if (!is_numeric($invoice_due_days)) {
             $invoice_due_days = 1;
         }
-        $due_time = strtotime('+' . $invoice_due_days . ' day');
+        $due_time = strtotime("+{$invoice_due_days} day");
         $model->due_at = date('Y-m-d H:i:s', $due_time);
 
         $model->serie = $systemService->getParamValue('invoice_series');
@@ -537,7 +571,7 @@ class Service implements InjectionAwareInterface
         $this->di['db']->store($model);
     }
 
-    public function approveInvoice(\Model_Invoice $invoice, array $data)
+    public function approveInvoice(\Model_Invoice $invoice, array $data): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminInvoiceApprove', 'params' => ['id' => $invoice->id]]);
 
@@ -551,7 +585,7 @@ class Service implements InjectionAwareInterface
             $this->tryPayWithCredits($invoice);
         }
 
-        $this->di['logger']->info('Approved invoice "%s"', $invoice->id);
+        $this->di['logger']->info("Approved invoice {$invoice->id}.");
 
         return true;
     }
@@ -568,52 +602,65 @@ class Service implements InjectionAwareInterface
         $required = $this->getTotalWithTax($invoice);
         $epsilon = 0.05;
 
-        if (abs($balance - $required) < $epsilon) {
+        if (abs($balance - $required) < $epsilon || $balance - $required > 0.00001) {
             if (DEBUG) {
-                $this->di['logger']->setChannel('billing')->info(sprintf('Setting invoice %s as paid with credits', $invoice->id));
+                $this->di['logger']->setChannel('billing')->info("Setting invoice {$invoice->id} as paid with credits for the amount of {$required}.");
             }
-            $this->markAsPaid($invoice);
 
-            return true;
-        }
+            $balanceTransaction = $this->di['db']->dispense('ClientBalance');
+            $balanceTransaction->client_id = $client->id;
+            $balanceTransaction->type = 'invoice';
+            $balanceTransaction->rel_id = $invoice->id;
 
-        if ($balance - $required > 0.00001) {
-            if (DEBUG) {
-                $this->di['logger']->setChannel('billing')->info(sprintf('Setting invoice %s as paid with credits', $invoice->id));
-            }
-            $this->markAsPaid($invoice);
+            $invoiceIdentifier = $invoice->serie_nr ?: $invoice->id;
+            $balanceTransaction->description = "Payment for invoice #{$invoiceIdentifier} using account credit.";
+
+            $balanceTransaction->amount = -$required;
+            $balanceTransaction->created_at = date('Y-m-d H:i:s');
+            $balanceTransaction->updated_at = date('Y-m-d H:i:s');
+            $this->di['db']->store($balanceTransaction);
+
+            $this->markAsPaid($invoice, false, true);
 
             return true;
         }
         if (DEBUG) {
-            $this->di['logger']->setChannel('billing')->info(sprintf('Invoice %s could not be paid with credits. Money in balance %s Required: %s', $invoice->id, $balance, $required));
+            $this->di['logger']->setChannel('billing')->info("Invoice {$invoice->id} could not be paid with credits. Money in balance {$balance} Required: {$required}.");
         }
     }
 
-    public function getTotalWithTax(\Model_Invoice $invoice)
+    public function getTotalWithTax(\Model_Invoice $invoice): float
     {
-        $total = $this->getTotal($invoice) + $this->getTax($invoice);
-
-        return (float) $total;
+        return $this->getTotal($invoice) + $this->getTax($invoice);
     }
 
-    public function getTax(\Model_Invoice $invoice)
+    public function getTax(\Model_Invoice $invoice): float
     {
         if ($invoice->taxrate <= 0) {
-            return 0;
+            return 0.0;
         }
 
-        $iiService = $this->di['mod_service']('Invoice', 'InvoiceItem');
-        $items = $this->di['db']->find('InvoiceItem', 'invoice_id = ? ', [$invoice->id]);
-        $tax = 0;
+        $items = $this->di['db']->find('InvoiceItem', 'invoice_id = :iid', [':iid' => $invoice->id]);
+
+        if (empty($items)) {
+            return 0.0;
+        }
+
+        $taxable_subtotal = 0.0;
         foreach ($items as $item) {
-            $tax += $iiService->getTax($item) * $item->quantity;
+            if ($item->taxed) {
+                $taxable_subtotal += ($item->price * $item->quantity);
+            }
         }
 
-        return $tax;
+        if ($taxable_subtotal == 0) {
+            return 0.0;
+        }
+
+        return round($taxable_subtotal * $invoice->taxrate / 100, 2);
     }
 
-    public function getTotal(\Model_Invoice $invoice)
+    public function getTotal(\Model_Invoice $invoice): float
     {
         $total = 0;
         $invoiceItems = $this->di['db']->find('InvoiceItem', 'invoice_id = ?', [$invoice->id]);
@@ -625,7 +672,7 @@ class Service implements InjectionAwareInterface
         return (float) $total;
     }
 
-    public function refundInvoice(\Model_Invoice $invoice, $note = null)
+    public function refundInvoice(\Model_Invoice $invoice, $note = null): ?int
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminInvoiceRefund', 'params' => ['id' => $invoice->id]]);
 
@@ -678,7 +725,7 @@ class Service implements InjectionAwareInterface
                     $pi->type = $item->type;
                     $pi->rel_id = $item->rel_id;
                     $pi->task = $item->task;
-                    $pi->status = \Model_InvoiceItem::STATUS_EXECUTED; // ark refund invoice as executed
+                    $pi->status = \Model_InvoiceItem::STATUS_EXECUTED; // Mark refund invoice as executed
                     $pi->title = $item->title;
                     $pi->period = $item->period;
                     $pi->quantity = $item->quantity;
@@ -693,8 +740,8 @@ class Service implements InjectionAwareInterface
 
                 $this->countIncome($new);
 
-                $this->addNote($invoice, sprintf('Refund invoice #%s generated', $new->id));
-                $this->addNote($new, sprintf('Refund for #%s invoice', $invoice->id));
+                $this->addNote($invoice, "Refund invoice #{$new->id} generated.");
+                $this->addNote($new, "Refund for #{$invoice->id} invoice.");
                 if (!empty($note)) {
                     $this->addNote($new, $note);
                 }
@@ -719,7 +766,7 @@ class Service implements InjectionAwareInterface
 
             case 'manual':
                 if (DEBUG) {
-                    error_log('Refunds are managed manually. No actions performed');
+                    error_log('Refunds are managed manually. No actions performed.');
                 }
 
                 break;
@@ -729,12 +776,12 @@ class Service implements InjectionAwareInterface
 
         $this->di['events_manager']->fire(['event' => 'onAfterAdminInvoiceRefund', 'params' => ['id' => $invoice->id]]);
 
-        $this->di['logger']->info('Refunded invoice #%s', $invoice->id);
+        $this->di['logger']->info("Refunded invoice #{$invoice->id}.");
 
         return $result;
     }
 
-    public function updateInvoice(\Model_Invoice $model, array $data)
+    public function updateInvoice(\Model_Invoice $model, array $data): bool
     {
         $invoiceItemService = $this->di['mod_service']('Invoice', 'InvoiceItem');
 
@@ -766,14 +813,14 @@ class Service implements InjectionAwareInterface
         if (empty($paid_at)) {
             $model->paid_at = null;
         } else {
-            $model->paid_at = date('Y-m-d H:i:s', strtotime($paid_at));
+            $model->paid_at = date('Y-m-d H:i:s', strtotime((string) $paid_at));
         }
 
         $due_at = $data['due_at'] ?? $model->due_at;
         if (empty($due_at)) {
             $model->due_at = null;
         } else {
-            $model->due_at = date('Y-m-d H:i:s', strtotime($due_at));
+            $model->due_at = date('Y-m-d H:i:s', strtotime((string) $due_at));
         }
 
         $model->serie = $data['serie'] ?? (empty($model->serie) ? null : $model->serie);
@@ -786,7 +833,7 @@ class Service implements InjectionAwareInterface
 
         $created_at = $data['created_at'] ?? '';
         if (!empty($created_at)) {
-            $model->created_at = date('Y-m-d H:i:s', strtotime($created_at));
+            $model->created_at = date('Y-m-d H:i:s', strtotime((string) $created_at));
         }
 
         $ni = $data['new_item'] ?? [];
@@ -808,12 +855,12 @@ class Service implements InjectionAwareInterface
 
         $this->di['events_manager']->fire(['event' => 'onAfterAdminInvoiceUpdate', 'params' => ['id' => $model->id]]);
 
-        $this->di['logger']->info('Updated invoice "%s"', $model->id);
+        $this->di['logger']->info("Updated invoice {$model->id}.");
 
         return true;
     }
 
-    public function rmInvoice(\Model_Invoice $model)
+    public function rmInvoice(\Model_Invoice $model): bool
     {
         // remove related invoice from orders
         $sql = '
@@ -831,7 +878,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function deleteInvoiceByAdmin(\Model_Invoice $model)
+    public function deleteInvoiceByAdmin(\Model_Invoice $model): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminInvoiceDelete', 'params' => ['id' => $model->id]]);
 
@@ -845,7 +892,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function deleteInvoiceByClient(\Model_Invoice $model)
+    public function deleteInvoiceByClient(\Model_Invoice $model): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeClientInvoiceDelete', 'params' => ['id' => $model->id]]);
 
@@ -858,7 +905,7 @@ class Service implements InjectionAwareInterface
         }
 
         $this->rmInvoice($model);
-        $this->di['logger']->info('Removed invoice #%s', $model->id);
+        $this->di['logger']->info("Removed invoice #{$model->id}.");
 
         return true;
     }
@@ -873,12 +920,12 @@ class Service implements InjectionAwareInterface
 
         $this->di['events_manager']->fire(['event' => 'onAfterAdminGenerateRenewalInvoice', 'params' => ['order_id' => $model->id, 'id' => $invoice->id]]);
 
-        $this->di['logger']->info('Generated renewal invoice #%s', $invoice->id);
+        $this->di['logger']->info("Generated renewal invoice #{$invoice->id}.");
 
         return $invoice->id;
     }
 
-    public function doBatchPayWithCredits(array $data)
+    public function doBatchPayWithCredits(array $data): bool
     {
         $unpaid = $this->findAllUnpaid($data);
         foreach ($unpaid as $proforma) {
@@ -891,15 +938,15 @@ class Service implements InjectionAwareInterface
                 }
             }
         }
-        $this->di['logger']->info('Executed action to try cover unpaid invoices with client credits');
+        $this->di['logger']->info('Executed action to try cover unpaid invoices with client credits.');
 
         return true;
     }
 
-    public function payInvoiceWithCredits(\Model_Invoice $model)
+    public function payInvoiceWithCredits(\Model_Invoice $model): bool
     {
         $this->tryPayWithCredits($model);
-        $this->di['logger']->info('Cover invoice with client credits');
+        $this->di['logger']->info('Cover invoice with client credits.');
 
         return true;
     }
@@ -920,7 +967,7 @@ class Service implements InjectionAwareInterface
         }
 
         if ($order->price <= 0) {
-            throw new InformationException('Invoices are not generated for 0 amount orders');
+            throw new InformationException('Invoices are not generated for 0 amount orders.');
         }
 
         $client = $this->di['db']->getExistingModelById('Client', $order->client_id, 'Client not found');
@@ -954,7 +1001,7 @@ class Service implements InjectionAwareInterface
         return $proforma;
     }
 
-    public function generateInvoicesForExpiringOrders()
+    public function generateInvoicesForExpiringOrders(): bool
     {
         $orderService = $this->di['mod_service']('Order');
         $orders = $orderService->getSoonExpiringActiveOrders();
@@ -973,12 +1020,12 @@ class Service implements InjectionAwareInterface
             }
         }
 
-        $this->di['logger']->info('Executed action to generate new invoices for expiring orders');
+        $this->di['logger']->info('Executed action to generate new invoices for expiring orders.');
 
         return true;
     }
 
-    public function doBatchPaidInvoiceActivation()
+    public function doBatchPaidInvoiceActivation(): bool
     {
         $invoiceItemService = $this->di['mod_service']('Invoice', 'InvoiceItem');
 
@@ -991,24 +1038,24 @@ class Service implements InjectionAwareInterface
                 error_log($e->getMessage());
             }
         }
-        $this->di['logger']->info('Executed action to activate paid invoices');
+        $this->di['logger']->info('Executed action to activate paid invoices.');
 
         return true;
     }
 
-    public function doBatchRemindersSend()
+    public function doBatchRemindersSend(): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminInvoiceSendReminders']);
         $list = $this->getUnpaidInvoicesLateFor();
         foreach ($list as $invoice) {
             $this->sendInvoiceReminder($invoice);
         }
-        $this->di['logger']->info('Executed action to send invoice payment reminders');
+        $this->di['logger']->info('Executed action to send invoice payment reminders.');
 
         return true;
     }
 
-    public function doBatchInvokeDueEvent(array $data)
+    public function doBatchInvokeDueEvent(array $data): bool
     {
         $once_per_day = isset($data['once_per_day']) ? (bool) $data['once_per_day'] : true;
         $key = 'invoice_overdue_invoked';
@@ -1016,7 +1063,7 @@ class Service implements InjectionAwareInterface
         // do not use api call to get system param to avoid invoking system module event hooks
         $ss = $this->di['mod_service']('System');
         $last_time = $ss->getParamValue($key);
-        if ($once_per_day && $last_time && (time() - strtotime($last_time)) < 86400) {
+        if ($once_per_day && $last_time && (time() - strtotime((string) $last_time)) < 86400) {
             // error_log('Already executed today.');
             return false;
         }
@@ -1037,7 +1084,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function sendInvoiceReminder(\Model_Invoice $invoice)
+    public function sendInvoiceReminder(\Model_Invoice $invoice): bool
     {
         // do not send accidental reminder for paid invoices
         if ($invoice->status == \Model_Invoice::STATUS_PAID) {
@@ -1057,7 +1104,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function counter()
+    public function counter(): array
     {
         $sql = 'SELECT status, count(id) as counter
                  FROM invoice
@@ -1113,7 +1160,7 @@ class Service implements InjectionAwareInterface
         return $proforma;
     }
 
-    public function processInvoice(array $data)
+    public function processInvoice(array $data): array
     {
         $allowSubscribe = $data['allow_subscription'] ?? true;
         $subscribe = false;
@@ -1180,16 +1227,19 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public function generatePDF($hash, $identity)
+    public function generatePDF($hash, $identity): void
     {
         $systemService = $this->di['mod_service']('system');
         $c = $systemService->getCompany();
         $document_format = $systemService->getParamValue('invoice_document_format', 'Letter');
 
         $invoice = $this->di['db']->findOne('Invoice', 'hash = :hash', [':hash' => $hash]);
+
         if (!$invoice instanceof \Model_Invoice) {
             throw new \FOSSBilling\Exception('Invoice not found');
         }
+
+        $this->checkInvoiceAuth($invoice->client_id);
 
         if (isset($invoice->currency)) {
             $currencyCode = $invoice->currency;
@@ -1230,7 +1280,7 @@ class Service implements InjectionAwareInterface
             'invoice' => $invoice,
         ];
 
-        $loader = new FilesystemLoader(__DIR__ . DIRECTORY_SEPARATOR . 'pdf_template');
+        $loader = new FilesystemLoader(Path::join(__DIR__, 'pdf_template'));
         $twig = $this->di['twig'];
         $twig->setLoader($loader);
         $html = $twig->render($this->getPdfTemplate(), $vars);
@@ -1242,7 +1292,7 @@ class Service implements InjectionAwareInterface
         exit(0);
     }
 
-    public function addNote(\Model_Invoice $model, $note)
+    public function addNote(\Model_Invoice $model, $note): bool
     {
         $n = $model->notes;
         $model->notes = $n . date('Y-m-d H:i:s') . ': ' . $note . '       ' . PHP_EOL;
@@ -1296,10 +1346,7 @@ class Service implements InjectionAwareInterface
         return $this->di['db']->find('Invoice', $conditions, [\Model_Invoice::STATUS_UNPAID, $days_after_issue]);
     }
 
-    /**
-     * @return bool
-     */
-    private function _isAutoApproved()
+    private function _isAutoApproved(): bool
     {
         /**
          * @var \Box\Mod\System\Service $systemService
@@ -1311,10 +1358,8 @@ class Service implements InjectionAwareInterface
 
     /**
      * @param bool $subscribe
-     *
-     * @return \Payment_Invoice
      */
-    public function getPaymentInvoice(\Model_Invoice $invoice, $subscribe = false)
+    public function getPaymentInvoice(\Model_Invoice $invoice, $subscribe = false): \Payment_Invoice
     {
         $proforma = $this->toApiArray($invoice);
         $client = $this->getBuyer($invoice);
@@ -1391,7 +1436,7 @@ class Service implements InjectionAwareInterface
         return $mpi;
     }
 
-    public function getBuyer(\Model_Invoice $invoice)
+    public function getBuyer(\Model_Invoice $invoice): array
     {
         return [
             'first_name' => $invoice->buyer_first_name,
@@ -1408,7 +1453,7 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public function rmByClient(\Model_Client $client)
+    public function rmByClient(\Model_Client $client): void
     {
         $invoices = $this->di['db']->find('Invoice', 'client_id = ?', [$client->id]);
         foreach ($invoices as $invoice) {
@@ -1422,10 +1467,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    /**
-     * @return bool
-     */
-    public function isInvoiceTypeDeposit(\Model_Invoice $invoice)
+    public function isInvoiceTypeDeposit(\Model_Invoice $invoice): bool
     {
         $invoiceItems = $this->di['db']->find('InvoiceItem', 'invoice_id = ?', [$invoice->id]);
 
@@ -1447,7 +1489,7 @@ class Service implements InjectionAwareInterface
         return $this->di['table_export_csv']('invoice', 'invoices.csv', $headers);
     }
 
-    private function checkInvoiceAuth(?int $invoiceClientId)
+    public function checkInvoiceAuth(?int $invoiceClientId): void
     {
         if ($invoiceClientId === null) {
             return;
@@ -1457,13 +1499,13 @@ class Service implements InjectionAwareInterface
         $hash_access = $systemService->getParamValue('invoice_accessible_from_hash', '0');
 
         // If hash_access is not 0 or if a client is logged in, get the logged-in client
-        if (!$this->di['auth']->isAdminLoggedIn() && $hash_access === '0') {
+        if (!$this->di['auth']->isAdminLoggedIn() && $hash_access === '0' && !Environment::isCLI()) {
             $client = $this->di['loggedin_client'];
             if ($invoiceClientId != $client->id) {
                 // Then either give an appropriate API response or redirect to the login page.
                 $api_str = '/api/';
                 $url = $_GET['_url'] ?? ($_SERVER['PATH_INFO'] ?? '');
-                if (strncasecmp($url, $api_str, strlen($api_str)) === 0) {
+                if (strncasecmp((string) $url, $api_str, strlen($api_str)) === 0) {
                     // Throw Exception if api request
                     throw new InformationException('You do not have permission to perform this action', [], 403);
                 } else {
@@ -1480,16 +1522,18 @@ class Service implements InjectionAwareInterface
     // Start of PDF related functions
     private function getPdfCss(): string
     {
-        $basePath = __DIR__ . DIRECTORY_SEPARATOR . 'pdf_template' . DIRECTORY_SEPARATOR;
+        $basePath = Path::join(__DIR__, 'pdf_template');
+        $customCssPath = Path::join($basePath, 'custom-pdf.css');
+        $defaultCssPath = Path::join($basePath, 'default-pdf.css');
 
-        if (file_exists($basePath . 'custom-pdf.css')) {
-            $CSS = file_get_contents($basePath . 'custom-pdf.css');
+        if ($this->filesystem->exists($customCssPath)) {
+            $CSS = $this->filesystem->readFile($customCssPath);
         } else {
-            $CSS = file_get_contents($basePath . 'default-pdf.css');
+            $CSS = $this->filesystem->readFile($defaultCssPath);
         }
 
         if (empty($CSS)) {
-            $CSS = file_get_contents($basePath . 'default-pdf.css');
+            $CSS = $this->filesystem->readFile($defaultCssPath);
         }
 
         return $CSS;
@@ -1497,7 +1541,7 @@ class Service implements InjectionAwareInterface
 
     private function getPdfTemplate(): string
     {
-        if (file_exists(__DIR__ . DIRECTORY_SEPARATOR . 'pdf_template' . DIRECTORY_SEPARATOR . 'custom-pdf.twig')) {
+        if ($this->filesystem->exists(Path::join(__DIR__, 'pdf_template', 'custom-pdf.twig'))) {
             return 'custom-pdf.twig';
         }
 
@@ -1510,9 +1554,9 @@ class Service implements InjectionAwareInterface
         $remote = false;
 
         // prevent openbasedir error from preventing pdf creation when debug mode is enabled
-        if (@!file_exists($source)) {
-            $source = $_SERVER['DOCUMENT_ROOT'] . $source;
-            if (!file_exists($source)) {
+        if (@!$this->filesystem->exists($source)) {
+            $source = Path::join($_SERVER['DOCUMENT_ROOT'], $source);
+            if (!$this->filesystem->exists($source)) {
                 // Assume the URL points to an image not hosted on this server
                 $source = $originalUrl;
                 $remote = true;
@@ -1520,7 +1564,7 @@ class Service implements InjectionAwareInterface
         }
 
         if (str_ends_with($source, '.svg')) {
-            $source = 'data:image/svg+xml;base64,' . base64_encode(file_get_contents($source));
+            $source = 'data:image/svg+xml;base64,' . base64_encode($this->filesystem->readFile($source));
             $remote = false; // The contents of the SVG are directly added to the page, so we can safely disable remote files for the PDFs.
         }
 
@@ -1536,6 +1580,7 @@ class Service implements InjectionAwareInterface
             'Address 3' => $invoice['seller']['address_3'],
             'Phone' => $invoice['seller']['phone'],
             'Email' => $invoice['seller']['email'],
+            'VAT Number' => $invoice['seller']['company_vat'],
         ];
 
         foreach ($sourceData as $label => $data) {
@@ -1560,6 +1605,7 @@ class Service implements InjectionAwareInterface
             'Zip' => $invoice['buyer']['zip'],
             'Country' => $invoice['buyer']['country'],
             'Phone' => $invoice['buyer']['phone'],
+            'VAT Number' => $invoice['buyer']['company_vat'],
         ];
 
         foreach ($sourceData as $label => $data) {

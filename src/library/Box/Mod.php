@@ -10,6 +10,8 @@
  */
 
 use FOSSBilling\Config;
+use Symfony\Component\Filesystem\Exception\IOException;
+use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Filesystem\Path;
 
 class Box_Mod
@@ -48,6 +50,7 @@ class Box_Mod
         'orderbutton',
         'formbuilder',
     ];
+    private readonly Filesystem $filesystem;
 
     /**
      * @param string $mod
@@ -58,6 +61,7 @@ class Box_Mod
             throw new FOSSBilling\Exception('Invalid module name');
         }
 
+        $this->filesystem = new Filesystem();
         $this->mod = strtolower($mod);
     }
 
@@ -68,21 +72,19 @@ class Box_Mod
 
     public function hasManifest()
     {
-        return file_exists(Path::normalize($this->_getModPath() . 'manifest.json'));
+        return $this->filesystem->exists(Path::join($this->_getModPath(), 'manifest.json'));
     }
 
     public function getManifest(): array
     {
-        if (!$this->hasManifest()) {
-            throw new FOSSBilling\Exception('Module :mod manifest file is missing', [':mod' => $this->mod], 5897);
-        }
-
-        $contents = file_get_contents(Path::normalize($this->_getModPath() . 'manifest.json'));
-        if (!json_validate($contents)) {
+        try {
+            $contents = $this->filesystem->readFile(Path::join($this->_getModPath(), 'manifest.json'));
+            $json = json_decode($contents, true, JSON_THROW_ON_ERROR);
+        } catch (IOException) {
+            throw new FOSSBilling\Exception('Module :mod manifest file is missing or not readable.', [':mod' => $this->mod], 5897);
+        } catch (JsonException) {
             throw new FOSSBilling\Exception('Module :mod manifest file is invalid. Check file syntax and permissions.', [':mod' => $this->mod]);
         }
-
-        $json = json_decode($contents, true);
 
         // default module info if some fields are missing
         $info = [
@@ -105,9 +107,8 @@ class Box_Mod
         $info = array_merge($info, $json);
         $info['id'] = $this->mod;
         $info['type'] = 'mod';
-
         if (!empty($info['icon_url'])) {
-            $info['icon_url'] = '/modules/' . ucfirst($this->mod) . '/' . $info['icon_url'];
+            $info['icon_url'] = Path::join('modules', ucfirst((string) $this->mod), $info['icon_url']);
         }
 
         return $info;
@@ -115,17 +116,17 @@ class Box_Mod
 
     public function hasService($sub = '')
     {
-        $filename = sprintf('Service%s.php', ucfirst($sub));
+        $filename = sprintf('Service%s.php', ucfirst((string) $sub));
 
-        return file_exists($this->_getModPath() . $filename);
+        return $this->filesystem->exists(Path::join($this->_getModPath(), $filename));
     }
 
-    public function getService($sub = '')
+    public function getService($sub = ''): object
     {
         if (!$this->hasService($sub)) {
             throw new FOSSBilling\Exception('Module :mod does not have service class', [':mod' => $this->mod], 5898);
         }
-        $class = 'Box\\Mod\\' . ucfirst($this->mod) . '\\Service' . ucfirst($sub);
+        $class = 'Box\\Mod\\' . ucfirst((string) $this->mod) . '\\Service' . ucfirst((string) $sub);
         $service = new $class();
         if (method_exists($service, 'setDi')) {
             $service->setDi($this->di);
@@ -136,16 +137,16 @@ class Box_Mod
 
     public function hasClientController()
     {
-        return file_exists($this->_getModPath() . 'Controller/Client.php');
+        return $this->filesystem->exists(Path::join($this->_getModPath(), 'Controller', 'Client.php'));
     }
 
-    public function getClientController()
+    public function getClientController(): object
     {
         if (!$this->hasClientController()) {
             throw new FOSSBilling\Exception('Module :mod Client controller class was not found', [':mod' => $this->mod]);
         }
 
-        $class = 'Box\\Mod\\' . ucfirst($this->mod) . '\\Controller\\Client';
+        $class = 'Box\\Mod\\' . ucfirst((string) $this->mod) . '\\Controller\\Client';
         $service = new $class();
         if (method_exists($service, 'setDi')) {
             $service->setDi($this->di);
@@ -156,20 +157,20 @@ class Box_Mod
 
     public function hasSettingsPage()
     {
-        return file_exists($this->_getModPath() . 'html_admin/mod_' . $this->mod . '_settings.html.twig');
+        return $this->filesystem->exists(Path::join($this->_getModPath(), 'html_admin', "mod_{$this->mod}_settings.html.twig"));
     }
 
     public function hasAdminController()
     {
-        return file_exists($this->_getModPath() . 'Controller/Admin.php');
+        return $this->filesystem->exists(Path::join($this->_getModPath(), 'Controller', 'Admin.php'));
     }
 
-    public function getAdminController()
+    public function getAdminController(): ?object
     {
         if (!$this->hasAdminController()) {
             return null;
         }
-        $class = 'Box\\Mod\\' . ucfirst($this->mod) . '\\Controller\\Admin';
+        $class = 'Box\\Mod\\' . ucfirst((string) $this->mod) . '\\Controller\\Admin';
         $service = new $class();
         if (method_exists($service, 'setDi')) {
             $service->setDi($this->di);
@@ -178,7 +179,7 @@ class Box_Mod
         return $service;
     }
 
-    public function install()
+    public function install(): bool
     {
         if ($this->isCore()) {
             return true;
@@ -196,7 +197,7 @@ class Box_Mod
         return false;
     }
 
-    public function uninstall()
+    public function uninstall(): bool
     {
         if ($this->isCore()) {
             return true;
@@ -214,7 +215,7 @@ class Box_Mod
         return false;
     }
 
-    public function update()
+    public function update(): bool
     {
         if ($this->isCore()) {
             throw new FOSSBilling\InformationException('Core modules cannot be updated');
@@ -233,12 +234,12 @@ class Box_Mod
         return false;
     }
 
-    public function getCoreModules()
+    public function getCoreModules(): array
     {
         return $this->core;
     }
 
-    public function isCore()
+    public function isCore(): bool
     {
         return in_array($this->mod, $this->core);
     }
@@ -248,26 +249,22 @@ class Box_Mod
         $db = $this->di['db'];
         $config = [];
 
-        $modName = 'mod_' . strtolower($this->mod);
+        $modName = 'mod_' . strtolower((string) $this->mod);
         $c = $db->findOne('extension_meta', 'extension = :ext AND meta_key = :key', [':ext' => $modName, ':key' => 'config']);
         if ($c) {
             $config = $this->di['crypt']->decrypt($c->meta_value, Config::getProperty('info.salt'));
-            if (json_validate($config)) {
-                $config = json_decode($config, true);
-            } else {
-                $config = [];
-            }
+            $config = is_string($config) ? json_decode($config, true) : [];
         }
 
         return $config;
     }
 
-    public function getName()
+    public function getName(): ?string
     {
         return $this->mod;
     }
 
-    public function registerClientRoutes(Box_App &$app)
+    public function registerClientRoutes(Box_App &$app): bool
     {
         if ($this->hasClientController()) {
             $cc = $this->getClientController();
@@ -281,8 +278,8 @@ class Box_Mod
         return false;
     }
 
-    private function _getModPath()
+    private function _getModPath(): string
     {
-        return PATH_MODS . DIRECTORY_SEPARATOR . ucfirst($this->mod) . DIRECTORY_SEPARATOR;
+        return Path::join(PATH_MODS, ucfirst((string) $this->mod));
     }
 }

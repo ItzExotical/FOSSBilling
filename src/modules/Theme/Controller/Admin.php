@@ -25,7 +25,7 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
         return $this->di;
     }
 
-    public function register(\Box_App &$app)
+    public function register(\Box_App &$app): void
     {
         $app->get('/theme/:theme', 'get_theme', ['theme' => '[a-z0-9-_]+'], static::class);
         $app->post('/theme/:theme', 'save_theme_settings', ['theme' => '[a-z0-9-_]+'], static::class);
@@ -34,7 +34,7 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
     /**
      * Save theme settings.
      */
-    public function save_theme_settings(\Box_App $app, $theme)
+    public function save_theme_settings(\Box_App $app, $theme): void
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeThemeSettingsSave', 'params' => $_POST]);
 
@@ -64,16 +64,14 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
             $service->updateSettings($t, $preset, $_POST);
             $service->regenerateThemeCssAndJsFiles($t, $preset, $api);
         } catch (\Exception $e) {
-            error_log($e);
-            $error = $e->getMessage();
+            error_log($e->getMessage());
         }
 
         // optional data file
         try {
             $service->regenerateThemeSettingsDataFile($t);
         } catch (\Exception $e) {
-            error_log($e);
-            $error = $e->getMessage();
+            error_log($e->getMessage());
         }
 
         $red_url = '/theme/' . $theme;
@@ -83,7 +81,7 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
         $app->redirect($red_url);
     }
 
-    public function get_theme(\Box_App $app, $theme)
+    public function get_theme(\Box_App $app, $theme): string
     {
         $this->di['is_admin_logged'];
 
@@ -111,7 +109,6 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
             'settings' => $service->getThemeSettings($t, $preset),
             'current_preset' => $preset,
             'presets' => $service->getThemePresets($t),
-            'snippets' => $t->getSnippets(),
         ];
 
         return $app->render('mod_theme_preset', $data);

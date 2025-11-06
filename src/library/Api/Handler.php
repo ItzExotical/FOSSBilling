@@ -13,11 +13,15 @@ use FOSSBilling\InjectionAwareInterface;
 
 final class Api_Handler implements InjectionAwareInterface
 {
-    protected $type;
+    protected string|array $type;
     protected $ip;
     protected ?Pimple\Container $di = null;
 
-    private bool $_acl_exception = false;
+    /**
+     * @var bool When true, ACL permission denials are reported as exceptions.
+     *           Defaults to true.
+     */
+    private bool $_acl_exception = true;
 
     public function __construct(protected $identity)
     {
@@ -37,7 +41,7 @@ final class Api_Handler implements InjectionAwareInterface
 
     public function __call($method, $arguments)
     {
-        if (!str_contains($method, '_')) {
+        if (!str_contains((string) $method, '_')) {
             throw new FOSSBilling\Exception('Method :method must contain underscore', [':method' => $method], 710);
         }
 
@@ -45,7 +49,7 @@ final class Api_Handler implements InjectionAwareInterface
             $arguments = $arguments[0];
         }
 
-        $e = explode('_', $method);
+        $e = explode('_', (string) $method);
         $mod = strtolower($e[0]);
         unset($e[0]);
         $method_name = implode('_', $e);
@@ -76,7 +80,7 @@ final class Api_Handler implements InjectionAwareInterface
             }
         }
 
-        $api_class = '\Box\Mod\\' . ucfirst($mod) . '\\Api\\' . ucfirst($this->type);
+        $api_class = '\Box\Mod\\' . ucfirst($mod) . '\\Api\\' . ucfirst((string) $this->type);
 
         $api = new $api_class();
 
@@ -89,7 +93,7 @@ final class Api_Handler implements InjectionAwareInterface
         $api->setDi($this->di);
         $api->setMod($bb_mod);
         $api->setIdentity($this->identity);
-        $api->setIp($this->di['request']->getClientAddress());
+        $api->setIp($this->di['request']->getClientIp());
         if ($bb_mod->hasService()) {
             $api->setService($this->di['mod_service']($mod));
         }
@@ -97,7 +101,7 @@ final class Api_Handler implements InjectionAwareInterface
         if (!method_exists($api, $method_name) || !is_callable([$api, $method_name])) {
             $reflector = new ReflectionClass($api);
             if (!$reflector->hasMethod('__call')) {
-                throw new FOSSBilling\Exception(':type API call :method does not exist in module :module', [':type' => ucfirst($this->type), ':method' => $method_name, ':module' => $mod], 740);
+                throw new FOSSBilling\Exception(':type API call :method does not exist in module :module', [':type' => ucfirst((string) $this->type), ':method' => $method_name, ':module' => $mod], 740);
             }
         }
 

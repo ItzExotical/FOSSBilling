@@ -17,12 +17,13 @@ class ServiceTest extends \BBTestCase
     public function testgetDi(): void
     {
         $di = new \Pimple\Container();
+        $itemInvoiceServiceMock = null;
         $this->service->setDi($di);
         $getDi = $this->service->getDi();
         $this->assertEquals($di, $getDi);
     }
 
-    public static function dataForSearchQuery()
+    public static function dataForSearchQuery(): array
     {
         return [
             [[], 'FROM invoice p', []],
@@ -113,10 +114,10 @@ class ServiceTest extends \BBTestCase
                 ],
             ],
             [
-                ['paid_at' => 1_353_715_200],
+                ['paid_at' => '1353715200'],
                 "AND DATE_FORMAT(p.paid_at, '%Y-%m-%d') = :paid_at",
                 [
-                    'paid_at' => 1_353_715_200,
+                    'paid_at' => '1353715200',
                 ],
             ],
             [
@@ -132,7 +133,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('dataForSearchQuery')]
-    public function testgetSearchQuery($data, $expectedStr, $expectedParams): void
+    public function testgetSearchQuery(array $data, string $expectedStr, array $expectedParams): void
     {
         $di = new \Pimple\Container();
 
@@ -152,10 +153,6 @@ class ServiceTest extends \BBTestCase
 
         $invoiceItemModel = new \Model_InvoiceItem();
         $invoiceItemModel->loadBean(new \DummyBean());
-
-        $itemInvoiceServiceMock = $this->getMockBuilder('\\' . ServiceInvoiceItem::class)->getMock();
-        $itemInvoiceServiceMock->expects($this->atLeastOnce())
-            ->method('getTax');
 
         $systemService = $this->getMockBuilder('\\' . \Box\Mod\System\Service::class)->getMock();
         $systemService->expects($this->atLeastOnce())
@@ -220,6 +217,7 @@ class ServiceTest extends \BBTestCase
             ->method('getQty');
 
         $di = new \Pimple\Container();
+        $itemInvoiceServiceMock = null;
         $di['db'] = $dbMock;
         $di['mod_service'] = $di->protect(function ($serviceName, $sub = '') use ($itemInvoiceServiceMock, $systemService, $subscriptionServiceMock) {
             $service = null;
@@ -235,7 +233,7 @@ class ServiceTest extends \BBTestCase
 
             return $service;
         });
-        $di['period'] = $di->protect(fn () => $periodMock);
+        $di['period'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $periodMock);
 
         $this->service->setDi($di);
 
@@ -368,7 +366,7 @@ class ServiceTest extends \BBTestCase
             ->method('exec');
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $systemServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemServiceMock);
         $di['db'] = $dbMock;
 
         $this->service->setDi($di);
@@ -512,7 +510,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $currencyService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $currencyService);
 
         $serviceMock->setDi($di);
         $serviceMock->countIncome($invoiceModel);
@@ -696,7 +694,7 @@ class ServiceTest extends \BBTestCase
 
     public function testgetTotalWithTax(): void
     {
-        $total = 10;
+        $total = 10.0;
         $tax = 2.2;
         $expected = $total + $tax;
         $serviceMock = $this->getMockBuilder('\\' . Service::class)
@@ -733,14 +731,14 @@ class ServiceTest extends \BBTestCase
 
         $itemInvoiceServiceMock = $this->getMockBuilder('\\' . ServiceInvoiceItem::class)->getMock();
 
-        $itemTotal = 10;
+        $itemTotal = 10.0;
         $itemInvoiceServiceMock->expects($this->atLeastOnce())
             ->method('getTotal')
             ->willReturn($itemTotal);
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $itemInvoiceServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $itemInvoiceServiceMock);
 
         $this->service->setDi($di);
         $result = $this->service->getTotal($invoiceModel);
@@ -751,7 +749,7 @@ class ServiceTest extends \BBTestCase
     public function testrefundInvoiceWithNegativeInvoiceLogic(): void
     {
         $newId = 1;
-        $total = 10;
+        $total = 10.0;
         $tax = 2.2;
         $serviceMock = $this->getMockBuilder('\\' . Service::class)
             ->onlyMethods(['getTotal', 'getTax', 'countIncome', 'addNote'])
@@ -787,7 +785,7 @@ class ServiceTest extends \BBTestCase
         $dbMock = $this->getMockBuilder('\Box_Database')->getMock();
         $dbMock->expects($this->atLeastOnce())
             ->method('dispense')
-            ->will($this->onConsecutiveCalls($invoiceModel, $invoiceItemModel));
+            ->willReturnOnConsecutiveCalls($invoiceModel, $invoiceItemModel);
         $dbMock->expects($this->atLeastOnce())
             ->method('store');
         $dbMock->expects($this->atLeastOnce())
@@ -796,7 +794,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $systemService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemService);
         $di['events_manager'] = $eventManagerMock;
         $di['logger'] = new \Box_Log();
 
@@ -865,7 +863,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $itemInvoiceServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $itemInvoiceServiceMock);
         $di['events_manager'] = $eventManagerMock;
         $di['logger'] = new \Box_Log();
 
@@ -1131,7 +1129,7 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
-        $di['mod_service'] = $di->protect(fn () => $invoiceItemServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $invoiceItemServiceMock);
 
         $serviceMock->setDi($di);
         $result = $serviceMock->generateForOrder($orderModel);
@@ -1157,7 +1155,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn([]);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderService);
 
         $this->service->setDi($di);
         $result = $this->service->generateInvoicesForExpiringOrders();
@@ -1196,7 +1194,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn($clientOrder);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $orderService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $orderService);
         $di['logger'] = new \Box_Log();
         $di['db'] = $dbMock;
 
@@ -1225,7 +1223,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn($invoiceItemModel);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $itemInvoiceServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $itemInvoiceServiceMock);
         $di['logger'] = new \Box_Log();
         $di['db'] = $dbMock;
 
@@ -1255,7 +1253,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn($invoiceItemModel);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $itemInvoiceServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $itemInvoiceServiceMock);
         $di['logger'] = new \Box_Log();
         $di['db'] = $dbMock;
 
@@ -1313,7 +1311,7 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['events_manager'] = $eventManagerMock;
-        $di['mod_service'] = $di->protect(fn () => $systemService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemService);
         $di['logger'] = new \Box_Log();
 
         $this->service->setDi($di);
@@ -1400,10 +1398,10 @@ class ServiceTest extends \BBTestCase
         $systemService = $this->getMockBuilder('\\' . \Box\Mod\System\Service::class)->getMock();
         $systemService->expects($this->atLeastOnce())
             ->method('getParamValue')
-            ->will($this->onConsecutiveCalls($minAmount, $maxAmount));
+            ->willReturnOnConsecutiveCalls($minAmount, $maxAmount);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $systemService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemService);
 
         $this->service->setDi($di);
 
@@ -1425,10 +1423,10 @@ class ServiceTest extends \BBTestCase
         $systemService = $this->getMockBuilder('\\' . \Box\Mod\System\Service::class)->getMock();
         $systemService->expects($this->atLeastOnce())
             ->method('getParamValue')
-            ->will($this->onConsecutiveCalls($minAmount, $maxAmount));
+            ->willReturnOnConsecutiveCalls($minAmount, $maxAmount);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $systemService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemService);
 
         $this->service->setDi($di);
 
@@ -1460,7 +1458,7 @@ class ServiceTest extends \BBTestCase
         $systemService = $this->getMockBuilder('\\' . \Box\Mod\System\Service::class)->getMock();
         $systemService->expects($this->atLeastOnce())
             ->method('getParamValue')
-            ->will($this->onConsecutiveCalls($minAmount, $maxAmount, true));
+            ->willReturnOnConsecutiveCalls($minAmount, $maxAmount, true);
 
         $itemInvoiceServiceMock = $this->getMockBuilder('\\' . ServiceInvoiceItem::class)->getMock();
         $itemInvoiceServiceMock->expects($this->atLeastOnce())

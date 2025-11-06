@@ -1,6 +1,5 @@
 <?php
 
-declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
  * Copyright 2011-2021 BoxBilling, Inc.
@@ -10,15 +9,19 @@ declare(strict_types=1);
  * @license http://www.apache.org/licenses/LICENSE-2.0 Apache-2.0
  */
 
+use Doctrine\ORM\EntityManager;
 use FOSSBilling\Config;
+use FOSSBilling\Doctrine\EntityManagerFactory;
 use FOSSBilling\Environment;
 use Lcharette\WebpackEncoreTwig\EntrypointsTwigExtension;
 use Lcharette\WebpackEncoreTwig\JsonManifest;
 use Lcharette\WebpackEncoreTwig\TagRenderer;
 use Lcharette\WebpackEncoreTwig\VersionedAssetsTwigExtension;
 use League\CommonMark\Extension\DefaultAttributes\DefaultAttributesExtension;
+use League\Csv\Writer;
 use RedBeanPHP\Facade;
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\WebpackEncoreBundle\Asset\EntrypointLookup;
 use Twig\Extension\CoreExtension;
 use Twig\Extension\DebugExtension;
@@ -26,17 +29,6 @@ use Twig\Extension\StringLoaderExtension;
 use Twig\Extra\Intl\IntlExtension;
 
 $di = new Pimple\Container();
-
-/*
- * Returns the current FOSSBilling config.
- *
- * @param void
- *
- * @deprecated
- *
- * @return array
- */
-$di['config'] = fn (): array => Config::getConfig();
 
 /*
  * Create a new logger instance and configures it based on the settings in the configuration file.
@@ -120,7 +112,7 @@ $di['pdo'] = function () {
         $pdo->exec("SET time_zone = '{$offset}'");
     }
 
-    return $pdo;
+    return new DebugBar\DataCollector\PDO\TraceablePDO($pdo);
 };
 
 /*
@@ -148,14 +140,16 @@ $di['db'] = function () use ($di) {
     return $db;
 };
 
+$di['em'] = (fn (): EntityManager => EntityManagerFactory::create());
+
 /*
  *
  * @param void
  *
- * @return Box_Pagination
+ * @return FOSSBilling\Pagination
  */
 $di['pager'] = function () use ($di) {
-    $service = new Box_Pagination();
+    $service = new FOSSBilling\Pagination();
     $service->setDi($di);
 
     return $service;
@@ -235,21 +229,24 @@ $di['session'] = function () use ($di) {
 };
 
 /*
+ * Creates a new request object based on the current request.
  *
  * @param void
  *
- * @return \FOSSBilling\Request
+ * @link https://symfony.com/doc/current/components/http_foundation.html
+ *
+ * @return Symfony\Component\HttpFoundation\Request
  */
-$di['request'] = fn (): FOSSBilling\Request => new FOSSBilling\Request();
+$di['request'] = fn (): Request => Request::createFromGlobals();
 
 /*
  * @param void
  *
+ * @link https://symfony.com/doc/current/components/cache/adapters/filesystem_adapter.html
+ *
  * @return FilesystemAdapter
  */
-$di['cache'] = fn (): FilesystemAdapter =>
-// Reference: https://symfony.com/doc/current/components/cache/adapters/filesystem_adapter.html
-new FilesystemAdapter('sf_cache', 24 * 60 * 60, PATH_CACHE);
+$di['cache'] = fn (): FilesystemAdapter => new FilesystemAdapter('sf_cache', 24 * 60 * 60, PATH_CACHE);
 
 /*
  *
@@ -277,8 +274,8 @@ $di['twig'] = $di->factory(function () use ($di) {
     // missing required settings.
     $locale = FOSSBilling\i18n::getActiveLocale();
     $timezone = Config::getProperty('i18n.timezone', 'UTC');
-    $date_format = strtoupper(Config::getProperty('i18n.date_format', 'MEDIUM'));
-    $time_format = strtoupper(Config::getProperty('i18n.time_format', 'SHORT'));
+    $date_format = strtoupper((string) Config::getProperty('i18n.date_format', 'MEDIUM'));
+    $time_format = strtoupper((string) Config::getProperty('i18n.time_format', 'SHORT'));
     $datetime_pattern = Config::getProperty('i18n.datetime_pattern');
 
     $loader = new Twig\Loader\ArrayLoader();
@@ -345,7 +342,7 @@ $di['is_client_logged'] = function () use ($di) {
         $api_str = '/api/';
         $url = $_GET['_url'] ?? ($_SERVER['PATH_INFO'] ?? '');
 
-        if (strncasecmp($url, $api_str, strlen($api_str)) === 0) {
+        if (strncasecmp((string) $url, $api_str, strlen($api_str)) === 0) {
             // Throw Exception if api request
             throw new Exception('Client is not logged in');
         } else {
@@ -386,13 +383,13 @@ $di['is_admin_logged'] = function () use ($di) {
     if (!$di['auth']->isAdminLoggedIn()) {
         $url = $_GET['_url'] ?? $_SERVER['PATH_INFO'] ?? '';
 
-        if (str_starts_with($url, '/api/')) {
+        if (str_starts_with((string) $url, '/api/')) {
             throw new Exception('Admin is not logged in');
         }
 
         $di['set_return_uri'];
 
-        header(sprintf('Location: %s', $di['url']->adminLink('staff/login')));
+        header("Location: {$di['url']->adminLink('staff/login')}");
         exit;
     }
 
@@ -419,7 +416,7 @@ $di['loggedin_client'] = function () use ($di) {
         // Then either give an appropriate API response or redirect to the login page.
         $api_str = '/api/';
         $url = $_GET['_url'] ?? ($_SERVER['PATH_INFO'] ?? '');
-        if (strncasecmp($url, $api_str, strlen($api_str)) === 0) {
+        if (strncasecmp((string) $url, $api_str, strlen($api_str)) === 0) {
             // Throw Exception if api request
             throw new Exception('Client is not logged in');
         } else {
@@ -457,7 +454,7 @@ $di['loggedin_admin'] = function () use ($di) {
         // Then either give an appropriate API response or redirect to the login page.
         $api_str = '/api/';
         $url = $_GET['_url'] ?? ($_SERVER['PATH_INFO'] ?? '');
-        if (strncasecmp($url, $api_str, strlen($api_str)) === 0) {
+        if (strncasecmp((string) $url, $api_str, strlen($api_str)) === 0) {
             // Throw Exception if api request
             throw new Exception('Admin is not logged in');
         } else {
@@ -473,8 +470,8 @@ $di['set_return_uri'] = function () use ($di): void {
     $url = $_GET['_url'] ?? $_SERVER['PATH_INFO'] ?? '';
     unset($_GET['_url']);
 
-    if (str_starts_with($url, ADMIN_PREFIX)) {
-        $url = substr($url, strlen(ADMIN_PREFIX));
+    if (str_starts_with((string) $url, ADMIN_PREFIX)) {
+        $url = substr((string) $url, strlen(ADMIN_PREFIX));
     }
 
     if ($_GET) {
@@ -507,11 +504,11 @@ $di['api'] = $di->protect(function ($role) use ($di) {
         $url = $_GET['_url'] ?? ($_SERVER['PATH_INFO'] ?? '');
 
         // If it's an API request, only allow requests to the "client" and "profile" modules so they can change their email address or resend the confirmation email.
-        if (strncasecmp($url, '/api/', strlen('/api/')) === 0) {
-            if (strncasecmp($url, '/api/client/client/', strlen('/api/client/client/')) !== 0 && strncasecmp($url, '/api/client/profile/', strlen('/api/client/profile/')) !== 0) {
+        if (strncasecmp((string) $url, '/api/', strlen('/api/')) === 0) {
+            if (strncasecmp((string) $url, '/api/client/client/', strlen('/api/client/client/')) !== 0 && strncasecmp((string) $url, '/api/client/profile/', strlen('/api/client/profile/')) !== 0) {
                 throw new Exception('Please check your mailbox and confirm your email address.');
             }
-        } elseif (strncasecmp($url, '/client', strlen('/client')) !== 0) {
+        } elseif (strncasecmp((string) $url, '/client', strlen('/client')) !== 0) {
             // If they aren't attempting to access their profile, redirect them to it.
             $login_url = $di['url']->link('client/profile');
             header("Location: $login_url");
@@ -625,7 +622,7 @@ $di['updater'] = function () use ($di) {
  * @return \Server_Manager The new server manager object that was just created.
  */
 $di['server_manager'] = $di->protect(function ($manager, $config) use ($di) {
-    $class = sprintf('Server_Manager_%s', ucfirst($manager));
+    $class = sprintf('Server_Manager_%s', ucfirst((string) $manager));
 
     $s = new $class($config);
     $s->setLog($di['logger']);
@@ -767,7 +764,7 @@ $di['table_export_csv'] = $di->protect(function (string $table, string $outputNa
         $headers = array_keys(reset($rows));
     }
 
-    $csv = League\Csv\Writer::createFromFileObject(new SplTempFileObject());
+    $csv = Writer::from(new SplTempFileObject());
     $csv->addFormatter(new League\Csv\EscapeFormula());
     $csv->insertOne($headers);
     $csv->insertAll($rows);

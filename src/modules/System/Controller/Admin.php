@@ -25,7 +25,7 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
         return $this->di;
     }
 
-    public function fetchNavigation()
+    public function fetchNavigation(): array
     {
         return [
             'group' => [
@@ -44,7 +44,7 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
                 ],
                 [
                     'location' => 'system',
-                    'label' => __trans('Update'),
+                    'label' => __trans('Update FOSSBilling'),
                     'index' => 100,
                     'uri' => $this->di['url']->adminLink('system/update'),
                     'class' => '',
@@ -53,7 +53,7 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
         ];
     }
 
-    public function register(\Box_App &$app)
+    public function register(\Box_App &$app): void
     {
         $app->get('/system', 'get_index', [], static::class);
         $app->get('/system/', 'get_index', [], static::class);
@@ -62,21 +62,21 @@ class Admin implements \FOSSBilling\InjectionAwareInterface
         $app->get('/system/update', 'get_update', [], static::class);
     }
 
-    public function get_index(\Box_App $app)
+    public function get_index(\Box_App $app): string
     {
         $this->di['is_admin_logged'];
 
         return $app->render('mod_system_index');
     }
 
-    public function get_activity(\Box_App $app)
+    public function get_activity(\Box_App $app): string
     {
         $this->di['is_admin_logged'];
 
         return $app->render('mod_system_activity');
     }
 
-    public function get_update(\Box_App $app)
+    public function get_update(\Box_App $app): string
     {
         $this->di['is_admin_logged'];
 

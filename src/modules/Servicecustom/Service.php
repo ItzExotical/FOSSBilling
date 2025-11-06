@@ -12,10 +12,18 @@
 namespace Box\Mod\Servicecustom;
 
 use FOSSBilling\Environment;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 
 class Service implements \FOSSBilling\InjectionAwareInterface
 {
     protected ?\Pimple\Container $di = null;
+    private readonly Filesystem $filesystem;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -27,7 +35,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $this->di;
     }
 
-    public function validateCustomForm(array &$data, array $product)
+    public function validateCustomForm(array &$data, array $product): void
     {
         if ($product['form_id']) {
             $formbuilderService = $this->di['mod_service']('formbuilder');
@@ -69,10 +77,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $model;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_activate(\Model_ClientOrder $order)
+    public function action_activate(\Model_ClientOrder $order): bool
     {
         $orderService = $this->di['mod_service']('order');
         $model = $orderService->getOrderService($order);
@@ -85,10 +90,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_renew(\Model_ClientOrder $order)
+    public function action_renew(\Model_ClientOrder $order): bool
     {
         // move expiration period to future
         $model = $this->_getOrderService($order);
@@ -101,10 +103,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_suspend(\Model_ClientOrder $order)
+    public function action_suspend(\Model_ClientOrder $order): bool
     {
         // move expiration period to future
         $model = $this->_getOrderService($order);
@@ -118,10 +117,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_unsuspend(\Model_ClientOrder $order)
+    public function action_unsuspend(\Model_ClientOrder $order): bool
     {
         // move expiration period to future
         $model = $this->_getOrderService($order);
@@ -135,10 +131,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_cancel(\Model_ClientOrder $order)
+    public function action_cancel(\Model_ClientOrder $order): bool
     {
         // move expiration period to future
         $model = $this->_getOrderService($order);
@@ -152,10 +145,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_uncancel(\Model_ClientOrder $order)
+    public function action_uncancel(\Model_ClientOrder $order): bool
     {
         // move expiration period to future
         $model = $this->_getOrderService($order);
@@ -169,15 +159,12 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return bool
-     */
-    public function action_delete(\Model_ClientOrder $order)
+    public function action_delete(\Model_ClientOrder $order): bool
     {
         try {
             $model = $this->_getOrderService($order);
         } catch (\Exception $e) {
-            error_log($e);
+            error_log($e->getMessage());
 
             return true;
         }
@@ -190,11 +177,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
 
     public function getConfig(\Model_ServiceCustom $model): array
     {
-        if (is_string($model->config) && json_validate($model->config)) {
-            return json_decode($model->config, true);
-        }
-
-        return [];
+        return json_decode($model->config ?? '', true) ?? [];
     }
 
     public function toApiArray(\Model_ServiceCustom $model): array
@@ -227,7 +210,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $this->callOnAdapter($model, $method, $params);
     }
 
-    public function updateConfig($orderId, $config)
+    public function updateConfig($orderId, $config): void
     {
         if (!is_array($config)) {
             throw new \FOSSBilling\Exception('Config must be an array');
@@ -265,8 +248,8 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         }
 
         // check if plugin exists. If plugin does not exist, do not throw error. Simply add to log
-        $file = sprintf('Plugin/%s/%s.php', $plugin, $plugin);
-        if (!Environment::isTesting() && !file_exists(PATH_LIBRARY . DIRECTORY_SEPARATOR . $file)) {
+        $file = Path::join('Plugin', $plugin, "{$plugin}.php");
+        if (!Environment::isTesting() && !$this->filesystem->exists(Path::join(PATH_LIBRARY, $file))) {
             $e = new \FOSSBilling\Exception('Plugin class file :file was not found', [':file' => $file], 3124);
             if (DEBUG) {
                 error_log($e->getMessage());
@@ -275,13 +258,9 @@ class Service implements \FOSSBilling\InjectionAwareInterface
             return null;
         }
 
-        require_once $file;
+        require_once Path::normalize($file);
 
-        if (is_string($model->plugin_config) && json_validate($model->plugin_config)) {
-            $config = json_decode($model->plugin_config, true);
-        } else {
-            $config = [];
-        }
+        $config = json_decode($model->plugin_config ?? '', true) ?? [];
 
         $adapter = new $plugin($config);
 

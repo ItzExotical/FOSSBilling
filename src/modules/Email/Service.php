@@ -13,10 +13,19 @@ namespace Box\Mod\Email;
 
 use FOSSBilling\Config;
 use FOSSBilling\Environment;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Finder\Finder;
 
 class Service implements \FOSSBilling\InjectionAwareInterface
 {
     protected ?\Pimple\Container $di = null;
+    private readonly Filesystem $filesystem;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -36,7 +45,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         ];
     }
 
-    public function getSearchQuery($data)
+    public function getSearchQuery($data): array
     {
         $query = 'SELECT * FROM activity_client_email';
 
@@ -81,7 +90,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $db->findOne('ActivityClientEmail', 'id = :id AND client_id = :client_id ORDER BY id DESC', $bindings);
     }
 
-    public function rmByClient(\Model_Client $client)
+    public function rmByClient(\Model_Client $client): bool
     {
         $models = $this->di['db']->find('ActivityClientEmail', 'client_id = ?', [$client->id]);
         foreach ($models as $model) {
@@ -91,7 +100,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    public function rm(\Model_ActivityClientEmail $email)
+    public function rm(\Model_ActivityClientEmail $email): bool
     {
         $db = $this->di['db'];
         $db->trash($email);
@@ -99,7 +108,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    public function toApiArray(\Model_ActivityClientEmail $model, $deep = true)
+    public function toApiArray(\Model_ActivityClientEmail $model, $deep = true): array
     {
         return [
             'id' => $model->id,
@@ -114,7 +123,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         ];
     }
 
-    public function setVars($t, $vars)
+    public function setVars($t, $vars): bool
     {
         $t->vars = $this->di['crypt']->encrypt(json_encode($vars), Config::getProperty('info.salt'));
         $this->di['db']->store($t);
@@ -128,11 +137,8 @@ class Service implements \FOSSBilling\InjectionAwareInterface
     public function getVars($t): array
     {
         $json = $this->di['crypt']->decrypt($t->vars, Config::getProperty('info.salt'));
-        if (is_string($json) && json_validate($json)) {
-            return json_decode($json, true);
-        }
 
-        return [];
+        return is_string($json) ? json_decode($json, true) : [];
     }
 
     public function sendTemplate($data)
@@ -197,8 +203,19 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         $systemService = $this->di['mod_service']('system');
 
         [$subject, $content] = $this->_parse($t, $vars);
-        $from = $data['from'] ?? $systemService->getParamValue('company_email');
-        $from_name = $data['from_name'] ?? $systemService->getParamValue('company_name');
+
+        $emailMod = $this->di['mod']('email');
+        $emailSettings = $emailMod->getConfig();
+
+        $customEmail = $emailSettings['from_email'] ?? '';
+        $customName = $emailSettings['from_name'] ?? '';
+
+        $companyEmail = $systemService->getParamValue('company_email');
+        $companyName = $systemService->getParamValue('company_name');
+
+        $from = $data['from'] ?? (!empty($customEmail) ? $customEmail : $companyEmail);
+        $from_name = $data['from_name'] ?? (!empty($customName) ? $customName : $companyName);
+
         $sent = false;
 
         if (!$from) {
@@ -228,7 +245,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $sent;
     }
 
-    public function sendMail($to, $from, $subject, $content, $to_name = null, $from_name = null, $client_id = null, $admin_id = null, bool $send_now = false, bool $throw_exceptions = false)
+    public function sendMail($to, $from, $subject, $content, $to_name = null, $from_name = null, $client_id = null, $admin_id = null, bool $send_now = false, bool $throw_exceptions = false): bool
     {
         // Add the email to the queue
         $email = $this->_queue($to, $from, $subject, $content, $to_name, $from_name, $client_id, $admin_id);
@@ -239,7 +256,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    private function _getDefaults($data)
+    private function _getDefaults($data): array
     {
         $code = $data['code'];
 
@@ -249,12 +266,13 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         $description = $data['default_description'] ?? null;
 
         $matches = [];
-        preg_match('/mod_([a-zA-Z0-9]+)_([a-zA-Z0-9]+)/i', $code, $matches);
+        preg_match('/mod_([a-zA-Z0-9]+)_([a-zA-Z0-9]+)/i', (string) $code, $matches);
         $mod = $matches[1];
-        $path = PATH_MODS . DIRECTORY_SEPARATOR . ucfirst($mod) . DIRECTORY_SEPARATOR . 'html_email' . DIRECTORY_SEPARATOR . $code . '.html.twig';
 
-        if (file_exists($path)) {
-            $tpl = file_get_contents($path);
+        $path = Path::join(PATH_MODS, ucfirst($mod), 'html_email', "{$code}.html.twig");
+
+        if ($this->filesystem->exists($path)) {
+            $tpl = $this->filesystem->readFile($path);
 
             $ms = [];
             preg_match('#{%.?block subject.?%}((.*?)+){%.?endblock.?%}#', $tpl, $ms);
@@ -301,7 +319,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $queue;
     }
 
-    private function _getVarsString()
+    private function _getVarsString(): string
     {
         $str = '{% apply markdown %}' . PHP_EOL . PHP_EOL;
         $str .= 'This email template was automatically generated by FOSSBilling extension.   ' . PHP_EOL;
@@ -315,7 +333,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $str . '{% endapply %}';
     }
 
-    private function _parse(\Model_EmailTemplate $t, $vars)
+    private function _parse(\Model_EmailTemplate $t, $vars): array
     {
         $systemService = $this->di['mod_service']('System');
         $pc = $systemService->renderString($t->content, false, $vars);
@@ -324,7 +342,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return [$ps, $pc];
     }
 
-    public function resend(\Model_ActivityClientEmail $email)
+    public function resend(\Model_ActivityClientEmail $email): bool
     {
         $di = $this->getDi();
         $extensionService = $di['mod_service']('extension');
@@ -354,7 +372,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    public function templateGetSearchQuery($data)
+    public function templateGetSearchQuery($data): array
     {
         $query = 'SELECT * FROM email_template';
 
@@ -389,7 +407,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return [$query, $bindings];
     }
 
-    public function queueGetSearchQuery($data)
+    public function queueGetSearchQuery($data): array
     {
         $query = 'SELECT * FROM mod_email_queue';
 
@@ -436,7 +454,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return $data;
     }
 
-    public function updateTemplate(\Model_EmailTemplate $model, $enabled = null, $category = null, $subject = null, $content = null)
+    public function updateTemplate(\Model_EmailTemplate $model, $enabled = null, $category = null, $subject = null, $content = null): bool
     {
         if (isset($enabled)) {
             $model->enabled = $enabled;
@@ -472,7 +490,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    public function resetTemplateByCode($code)
+    public function resetTemplateByCode($code): bool
     {
         $t = $this->di['db']->findOne('EmailTemplate', 'action_code = :action', [':action' => $code]);
 
@@ -509,48 +527,47 @@ class Service implements \FOSSBilling\InjectionAwareInterface
 
         $modelId = $this->di['db']->store($model);
 
-        $this->di['logger']->info('Added new  email template #%s', $modelId);
+        $this->di['logger']->info('Added new email template #%s', $modelId);
 
         return $model;
     }
 
-    public function templateBatchGenerate()
+    public function templateBatchGenerate(): bool
     {
-        $pattern = PATH_MODS . '/*/html_email/*.html.twig';
-        $list = glob($pattern);
-        foreach ($list as $path) {
-            $code = str_replace('.html', '', pathinfo($path, PATHINFO_FILENAME));
-            $dir = pathinfo($path, PATHINFO_DIRNAME);
-            $dir = pathinfo($dir, PATHINFO_DIRNAME);
-            $dir = pathinfo($dir, PATHINFO_FILENAME);
-            $mod = strtolower($dir);
+        $extensionService = $this->di['mod_service']('extension');
 
-            // skip if disabled
-            $extensionService = $this->di['mod_service']('extension');
+        $finder = new Finder();
+        $finder = $finder->files()->in(PATH_MODS . '/*/html_email/')->name('*.html.twig');
 
-            if (!$extensionService->isExtensionActive('mod', $mod)) {
+        foreach ($finder as $file) {
+            $code = $file->getBasename('.html.twig');
+            $module = strtolower(Path::getFilenameWithoutExtension(Path::getDirectory($file->getPath())));
+
+            // Skip if module is not active.
+            if (!$extensionService->isExtensionActive('mod', $module)) {
                 continue;
             }
 
-            // skip if already exists
+            // Skip if template already exists.
             if ($this->di['db']->findOne('EmailTemplate', 'action_code = :code', [':code' => $code])) {
                 continue;
             }
 
-            [$subject, $content, $desc, $enabled, $mod] = $this->_getDefaults(['code' => $code]);
-            $t = $this->templateCreate($code, $subject, $content, $enabled, $mod);
-            if ($desc) {
-                $t->description = $desc;
-                $this->di['db']->store($t);
+            [$subject, $content, $description, $enabled, $module] = $this->_getDefaults(['code' => $code]);
+            $template = $this->templateCreate($code, $subject, $content, $enabled, $module);
+
+            if ($description) {
+                $template->description = $description;
+                $this->di['db']->store($template);
             }
         }
 
-        $this->di['logger']->info('Generated email templates for installed extensions');
+        $this->di['logger']->info('Generated email templates for installed modules.');
 
         return true;
     }
 
-    public function templateBatchDisable()
+    public function templateBatchDisable(): bool
     {
         $sql = 'UPDATE email_template SET enabled = 0 WHERE 1';
         $this->di['db']->exec($sql);
@@ -559,7 +576,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         return true;
     }
 
-    public function templateBatchEnable()
+    public function templateBatchEnable(): bool
     {
         $sql = 'UPDATE email_template SET enabled = 1 WHERE 1';
         $this->di['db']->exec($sql);
@@ -571,10 +588,8 @@ class Service implements \FOSSBilling\InjectionAwareInterface
     /**
      * Sends emails from queue, respecting the configured time limit and emails per cron limit.
      * If an email fails to be sent, it will be skipped and retried on the next cron run until the retry limit is reached.
-     *
-     * @return void
      */
-    public function batchSend()
+    public function batchSend(): void
     {
         $mod = $this->di['mod']('email');
         $settings = $mod->getConfig();
@@ -602,7 +617,7 @@ class Service implements \FOSSBilling\InjectionAwareInterface
         }
     }
 
-    private function _sendFromQueue(\Model_ModEmailQueue $queue, bool $throw_exceptions = false)
+    private function _sendFromQueue(\Model_ModEmailQueue $queue, bool $throw_exceptions = false): bool
     {
         $extensionService = $this->di['mod_service']('extension');
         if ($extensionService->isExtensionActive('mod', 'demo')) {

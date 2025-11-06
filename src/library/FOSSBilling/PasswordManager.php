@@ -1,8 +1,8 @@
 <?php
 
+declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
- * Copyright 2011-2021 BoxBilling, Inc.
  * SPDX-License-Identifier: Apache-2.0.
  *
  * @copyright FOSSBilling (https://www.fossbilling.org)
@@ -69,7 +69,7 @@ class PasswordManager
     {
         $hash = password_hash($password, $this->algo, $this->options);
         if (!is_string($hash)) {
-            throw new \Exception("Password hashing failed with $this->algo and the following options: " . print_r($this->options, true));
+            throw new \Exception("Password hashing failed with {$this->algo} and the following options: " . print_r($this->options, true));
         } else {
             return $hash;
         }

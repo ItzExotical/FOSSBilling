@@ -13,17 +13,26 @@ namespace Box\Mod\System;
 
 use FOSSBilling\Config;
 use FOSSBilling\Environment;
+use FOSSBilling\GeoIP\Reader;
 use FOSSBilling\SentryHelper;
 use FOSSBilling\Version;
 use Pimple\Container;
 use PrinsFrank\Standards\Country\CountryAlpha2;
 use PrinsFrank\Standards\CountryCallingCode\CountryCallingCode;
 use PrinsFrank\Standards\Language\LanguageAlpha2;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Contracts\Cache\ItemInterface;
 
 class Service
 {
     protected ?Container $di = null;
+    private readonly Filesystem $filesystem;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(Container $di): void
     {
@@ -88,7 +97,7 @@ class Service
         return $results;
     }
 
-    public function setParamValue($param, $value, $createIfNotExists = true)
+    public function setParamValue($param, $value, $createIfNotExists = true): bool
     {
         // Skip this param if the user isn't permitted to update it.
         if (!$this->canUpdateParam($param)) {
@@ -116,7 +125,7 @@ class Service
         return true;
     }
 
-    public function paramExists($param)
+    public function paramExists($param): bool
     {
         $pdo = $this->di['pdo'];
         $q = 'SELECT id
@@ -158,7 +167,7 @@ class Service
         return $result;
     }
 
-    public function getCompany()
+    public function getCompany(): array
     {
         $c = [
             'company_name',
@@ -174,6 +183,7 @@ class Service
             'company_bank_name',
             'company_bic',
             'company_display_bank_info',
+            'company_bank_info_pagebottom',
             'company_account_number',
             'company_number',
             'company_note',
@@ -250,7 +260,7 @@ class Service
         return $result;
     }
 
-    public function updateParams($data)
+    public function updateParams($data): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminSettingsUpdate', 'params' => $data]);
 
@@ -292,19 +302,19 @@ class Service
             $cronUrl = $this->di['url']->adminLink('extension/settings/cron');
 
             // Perform the fallback behavior if enabled
-            if (!$disableAutoCron && (!$last_exec || (time() - strtotime($last_exec)) / 60 >= 15)) {
+            if (!$disableAutoCron && (!$last_exec || (time() - strtotime((string) $last_exec)) / 60 >= 15)) {
                 $cronService->runCrons();
             }
 
             // And now return the correctly message for the given situation
             if (!$last_exec) {
                 $msgs['danger'][] = [
-                    'text' => 'Cron was never executed, please ensure you have configured the cronjob or else scheduled tasks within FOSSBilling will not behave correctly.',
+                    'text' => __trans('Cron was never executed, please ensure you have configured the cronjob or else scheduled tasks within FOSSBilling will not behave correctly.'),
                     'url' => $cronUrl,
                 ];
-            } elseif ((time() - strtotime($last_exec)) / 60 >= 15) {
+            } elseif ((time() - strtotime((string) $last_exec)) / 60 >= 15) {
                 $msgs['danger'][] = [
-                    'text' => 'FOSSBilling has detected that cron hasn\'t been run in an abnormal time period. Please ensure the cronjob is configured to be run every 5 minutes.',
+                    'text' => __trans("FOSSBilling has detected that cron hasn't been run in an abnormal time period. Please ensure the cronjob is configured to be run every 5 minutes."),
                     'url' => $cronUrl,
                 ];
             }
@@ -325,7 +335,7 @@ class Service
                 if (!$lastErrorReportingNudge) {
                     // The user upgraded from a version that didn't have error reporting functionality, so let's nudge them about it now.
                     return [
-                        'text' => 'We\'d apreciate it if you\'d consider opting into error reporting for FOSSBilling. Doing so will help us improve the software and provide you with a better experience. (Message will remain for 15 minutes)',
+                        'text' => __trans("We'd appreciate it if you'd consider opting into error reporting for FOSSBilling. Doing so will help us improve the software and provide you with a better experience. (Message will remain for 15 minutes)"),
                         'url' => $url,
                     ];
                 } elseif ((version_compare(SentryHelper::last_change, $lastErrorReportingNudge) === 1) && Config::getProperty('debug_and_monitoring.report_errors', false) && !Version::isPreviewVersion()) {
@@ -336,7 +346,7 @@ class Service
                     $item->expiresAfter(60 * 60 * 24);
 
                     return [
-                        'text' => 'Error reporting in FOSSBilling has changed since you last reviewed it. You may want to consider reviewing the changes to see what\'s been changed. (This message will remain for 24 hours)',
+                        'text' => __trans("Error reporting in FOSSBilling has changed since you last reviewed it. You may want to consider reviewing the changes to see what's been changed. (This message will remain for 24 hours)"),
                         'url' => $url,
                     ];
                 } else {
@@ -349,8 +359,8 @@ class Service
             }
         }
 
-        $install = PATH_ROOT . '/install';
-        if (file_exists(PATH_ROOT . '/install')) {
+        $install = Path::join(PATH_ROOT, 'install');
+        if (!Environment::isDevelopment() && $this->filesystem->exists($install)) {
             $msgs['danger'][] = [
                 'text' => sprintf('Install module "%s" still exists. Please remove it for security reasons.', $install),
             ];
@@ -378,13 +388,13 @@ class Service
             return [
                 [
                     'type' => 'warning',
-                    'message' => 'Warning: ' . $e->getMessage(),
+                    'message' => "Warning: {$e->getMessage()}",
                 ],
             ];
         }
     }
 
-    public function templateExists($file, $identity = null)
+    public function templateExists($file, $identity = null): bool
     {
         if ($identity instanceof \Model_Admin) {
             $client = false;
@@ -394,7 +404,7 @@ class Service
         $themeService = $this->di['mod_service']('theme');
         $theme = $themeService->getThemeConfig($client);
         foreach ($theme['paths'] as $path) {
-            if (file_exists($path . DIRECTORY_SEPARATOR . $file)) {
+            if ($this->filesystem->exists(Path::join($path, $file))) {
                 return true;
             }
         }
@@ -412,7 +422,7 @@ class Service
                 try {
                     $twig->addGlobal('client', $this->di['api_client']);
                 } catch (\Exception $e) {
-                    error_log('api_client could not be added to template: ' . $e->getMessage());
+                    error_log("api_client could not be added to template: {$e->getMessage()}.");
                 }
             }
         } else {
@@ -456,9 +466,10 @@ class Service
         return $parsed;
     }
 
-    public function clearCache()
+    public function clearCache(): bool
     {
-        $this->di['tools']->emptyFolder(PATH_CACHE);
+        $this->filesystem->remove(PATH_CACHE);
+        $this->filesystem->mkdir(PATH_CACHE);
 
         return true;
     }
@@ -480,7 +491,7 @@ class Service
         return $data;
     }
 
-    public function getCurrentUrl()
+    public function getCurrentUrl(): string
     {
         $pageScheme = $_SERVER['HTTPS'] ? 'https' : 'http';
         $pageURL = $pageScheme . '://';
@@ -493,8 +504,8 @@ class Service
         }
 
         $this_page = $_SERVER['REQUEST_URI'] ?? '';
-        if (str_contains($this_page, '?')) {
-            $a = explode('?', $this_page);
+        if (str_contains((string) $this_page, '?')) {
+            $a = explode('?', (string) $this_page);
             $this_page = reset($a);
         }
 
@@ -532,7 +543,7 @@ class Service
         return $results;
     }
 
-    public function getLocales()
+    public function getLocales(): array
     {
         return [
             'aa' => 'Afar',
@@ -874,7 +885,7 @@ class Service
         return $res;
     }
 
-    public function getStates()
+    public function getStates(): array
     {
         return [
             'AK' => 'Alaska',
@@ -985,7 +996,7 @@ class Service
         return $messages;
     }
 
-    public function setPendingMessage($msg)
+    public function setPendingMessage($msg): bool
     {
         $messages = $this->getPendingMessages();
         $messages[] = $msg;
@@ -994,19 +1005,20 @@ class Service
         return true;
     }
 
-    public function clearPendingMessages()
+    public function clearPendingMessages(): bool
     {
         $this->di['session']->delete('pending_messages');
 
         return true;
     }
 
-    public static function onBeforeAdminCronRun(\Box_Event $event)
+    public static function onBeforeAdminCronRun(\Box_Event $event): void
     {
         $di = $event->getDi();
+        Reader::updateDefaultDatabases();
 
         try {
-            // Prune the classmap to remove classes which are no logner on the disk or that have moved.
+            // Prune the classmap to remove classes which are no longer on the disk or that have moved.
             $loader = new \FOSSBilling\AutoLoader();
             $loader->getAntLoader()->pruneClassmap();
 

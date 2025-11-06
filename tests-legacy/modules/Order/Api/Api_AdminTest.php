@@ -52,9 +52,12 @@ class Api_AdminTest extends BBTestCase
         $serviceMock->expects($this->atLeastOnce())->method('getSearchQuery')
             ->willReturn(['query', []]);
 
-        $paginatorMock = $this->getMockBuilder('\Box_Pagination')->disableOriginalConstructor()->getMock();
+        $paginatorMock = $this->getMockBuilder('\\' . FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $paginatorMock->expects($this->atLeastOnce())
-            ->method('getAdvancedResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn(['list' => []]);
 
         $modMock = $this->getMockBuilder('\Box_Mod')->disableOriginalConstructor()->getMock();
@@ -64,7 +67,7 @@ class Api_AdminTest extends BBTestCase
 
         $di = new Pimple\Container();
         $di['pager'] = $paginatorMock;
-        $di['mod'] = $di->protect(fn () => $modMock);
+        $di['mod'] = $di->protect(fn (): PHPUnit\Framework\MockObject\MockObject => $modMock);
 
         $this->api->setDi($di);
 
@@ -84,13 +87,18 @@ class Api_AdminTest extends BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
+
+        $client = new Model_Client();
+        $client->loadBean(new DummyBean());
+
+        $product = new Model_Product();
+        $product->loadBean(new DummyBean());
 
         $dbMock = $this->getMockBuilder('\Box_Database')->disableOriginalConstructor()->getMock();
         $dbMock->expects($this->exactly(2))
             ->method('getExistingModelById')
-            ->will($this->onConsecutiveCalls(new Model_Client(), new Model_Product()));
+            ->willReturnOnConsecutiveCalls($client, $product);
 
         $di = new Pimple\Container();
         $di['validator'] = $validatorMock;
@@ -391,7 +399,7 @@ class Api_AdminTest extends BBTestCase
         $serviceMock->expects($this->atLeastOnce())->method('deleteFromOrder')
             ->willReturn(true);
         $serviceMock->expects($this->atLeastOnce())->method('getOrderAddonsList')
-            ->willReturn([new Model_ClientOrder()]);
+            ->willReturn([$order]);
 
         $apiMock->setService($serviceMock);
 
@@ -526,9 +534,12 @@ class Api_AdminTest extends BBTestCase
         $serviceMock->expects($this->atLeastOnce())->method('getOrderStatusSearchQuery')
             ->willReturn(['query', []]);
 
-        $paginatorMock = $this->getMockBuilder('\Box_Pagination')->disableOriginalConstructor()->getMock();
+        $paginatorMock = $this->getMockBuilder('\\' . FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $paginatorMock->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn([]);
 
         $di = new Pimple\Container();
@@ -553,8 +564,7 @@ class Api_AdminTest extends BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $order = new Model_ClientOrder();
         $order->loadBean(new DummyBean());
@@ -587,8 +597,7 @@ class Api_AdminTest extends BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $order = new Model_ClientOrder();
         $order->loadBean(new DummyBean());
@@ -633,15 +642,15 @@ class Api_AdminTest extends BBTestCase
 
     public function testAddons(): void
     {
+        $order = new Model_ClientOrder();
+        $order->loadBean(new DummyBean());
+
         $serviceMock = $this->getMockBuilder('\\' . Box\Mod\Order\Service::class)
             ->onlyMethods(['getOrderAddonsList', 'toApiArray'])->getMock();
         $serviceMock->expects($this->atLeastOnce())->method('getOrderAddonsList')
-            ->willReturn([new Model_ClientOrder()]);
+            ->willReturn([$order]);
         $serviceMock->expects($this->atLeastOnce())->method('toApiArray')
             ->willReturn([]);
-
-        $order = new Model_ClientOrder();
-        $order->loadBean(new DummyBean());
 
         $apiMock = $this->getMockBuilder('\\' . Box\Mod\Order\Api\Admin::class)->onlyMethods(['_getOrder'])->disableOriginalConstructor()->getMock();
         $apiMock->expects($this->atLeastOnce())
@@ -663,8 +672,7 @@ class Api_AdminTest extends BBTestCase
     {
         $validatorMock = $this->getMockBuilder('\\' . FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $serviceMock = $this->getMockBuilder('\\' . Box\Mod\Order\Service::class)
             ->onlyMethods(['toApiArray'])->getMock();
@@ -700,8 +708,7 @@ class Api_AdminTest extends BBTestCase
         willReturn(true);
         $validatorMock = $this->getMockBuilder('\\' . FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new Pimple\Container();
         $di['validator'] = $validatorMock;

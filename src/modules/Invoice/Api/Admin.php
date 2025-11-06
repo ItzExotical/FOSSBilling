@@ -28,8 +28,8 @@ class Admin extends \Api_Abstract
     {
         $service = $this->getService();
         [$sql, $params] = $service->getSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getAdvancedResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $invoice = $this->di['db']->getExistingModelById('Invoice', $item['id'], 'Invoice not found');
             $pager['list'][$key] = $this->getService()->toApiArray($invoice, true, $this->getIdentity());
@@ -91,7 +91,7 @@ class Admin extends \Api_Abstract
             try {
                 return $transactionService->processTransaction($newtx);
             } catch (\Exception $e) {
-                $this->di['logger']->info('Error processing transaction: ' . $e->getMessage());
+                $this->di['logger']->info("Error processing transaction: {$e->getMessage()}.");
             }
         }
 
@@ -357,7 +357,7 @@ class Admin extends \Api_Abstract
     {
         $transactionService = $this->di['mod_service']('Invoice', 'Transaction');
 
-        return $transactionService->proccessReceivedATransactions();
+        return $transactionService->processReceivedATransactions();
     }
 
     /**
@@ -416,7 +416,7 @@ class Admin extends \Api_Abstract
      * @optional array $get - $_GET data
      * @optional array $post - $_POST data
      * @optional array $server - $_SERVER data
-     * @optional array $http_raw_post_data - file_get_contents("php://input")
+     * @optional array $http_raw_post_data - php://input
      * @optional string $txn_id - transaction id on payment gateway
      * @optional bool $skip_validation - makes params invoice_id and gateway_id optional
      *
@@ -476,8 +476,8 @@ class Admin extends \Api_Abstract
     {
         $transactionService = $this->di['mod_service']('Invoice', 'Transaction');
         [$sql, $params] = $transactionService->getSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $transaction = $this->di['db']->getExistingModelById('Transaction', $item['id'], 'Transaction not found');
             $pager['list'][$key] = $transactionService->toApiArray($transaction);
@@ -556,8 +556,8 @@ class Admin extends \Api_Abstract
         $gatewayService = $this->di['mod_service']('Invoice', 'PayGateway');
         [$sql, $params] = $gatewayService->getSearchQuery($data);
 
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $gateway = $this->di['db']->getExistingModelById('PayGateway', $item['id'], 'Gateway not found');
             $pager['list'][$key] = $gatewayService->toApiArray($gateway, false, $this->getIdentity());
@@ -702,8 +702,8 @@ class Admin extends \Api_Abstract
     {
         $subscriptionService = $this->di['mod_service']('Invoice', 'Subscription');
         [$sql, $params] = $subscriptionService->getSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $subscription = $this->di['db']->getExistingModelById('Subscription', $item['id'], 'Subscription not found');
             $pager['list'][$key] = $subscriptionService->toApiArray($subscription);
@@ -914,9 +914,9 @@ class Admin extends \Api_Abstract
     {
         $taxService = $this->di['mod_service']('Invoice', 'Tax');
         [$sql, $params] = $taxService->getSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
 
-        return $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        return $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
     }
 
     /**
@@ -945,10 +945,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Deletes invoices with given IDs.
-     *
-     * @return bool
      */
-    public function batch_delete($data)
+    public function batch_delete($data): bool
     {
         $required = [
             'ids' => 'IDs not passed',
@@ -964,10 +962,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Deletes subscriptions with given IDs.
-     *
-     * @return bool
      */
-    public function batch_delete_subscription($data)
+    public function batch_delete_subscription($data): bool
     {
         $required = [
             'ids' => 'IDs not passed',
@@ -983,10 +979,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Deletes transactions with given IDs.
-     *
-     * @return bool
      */
-    public function batch_delete_transaction($data)
+    public function batch_delete_transaction($data): bool
     {
         $required = [
             'ids' => 'IDs not passed',
@@ -1002,10 +996,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Deletes taxes with given IDs.
-     *
-     * @return bool
      */
-    public function batch_delete_tax($data)
+    public function batch_delete_tax($data): bool
     {
         $required = [
             'ids' => 'IDs not passed',

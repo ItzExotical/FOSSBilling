@@ -12,12 +12,20 @@ declare(strict_types=1);
 
 namespace FOSSBilling;
 
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\Cache\ItemInterface;
 
 class Validate
 {
     protected ?\Pimple\Container $di = null;
+    private readonly Filesystem $filesystem;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -71,10 +79,10 @@ class Validate
 
             $client = HttpClient::create(['bindto' => BIND_TO]);
             $response = $client->request('GET', 'https://publicsuffix.org/list/public_suffix_list.dat');
-            $dbPath = PATH_CACHE . DIRECTORY_SEPARATOR . 'tlds.txt';
+            $dbPath = Path::join(PATH_CACHE, 'tlds.txt');
 
             if ($response->getStatusCode() === 200) {
-                @file_put_contents($dbPath, $response->getContent());
+                $this->filesystem->dumpFile($dbPath, $response->getContent());
             } else {
                 $item->expiresAfter(3600);
 
@@ -82,7 +90,7 @@ class Validate
             }
 
             @$database = file($dbPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            @unlink($dbPath);
+            $this->filesystem->remove($dbPath);
             if (!$database) {
                 $item->expiresAfter(3600);
 
@@ -126,23 +134,23 @@ class Validate
 
     public function isPasswordStrong($pwd): bool
     {
-        if (strlen($pwd) < 8) {
+        if (strlen((string) $pwd) < 8) {
             throw new InformationException('Minimum password length is 8 characters.');
         }
 
-        if (strlen($pwd) > 256) {
+        if (strlen((string) $pwd) > 256) {
             throw new InformationException('Maximum password length is 256 characters.');
         }
 
-        if (!preg_match('#[0-9]+#', $pwd)) {
+        if (!preg_match('#[0-9]+#', (string) $pwd)) {
             throw new InformationException('Password must include at least one number.');
         }
 
-        if (!preg_match('#[a-z]+#', $pwd)) {
+        if (!preg_match('#[a-z]+#', (string) $pwd)) {
             throw new InformationException('Password must include at least one lowercase letter.');
         }
 
-        if (!preg_match('#[A-Z]+#', $pwd)) {
+        if (!preg_match('#[A-Z]+#', (string) $pwd)) {
             throw new InformationException('Password must include at least one uppercase letter.');
         }
 
@@ -162,7 +170,7 @@ class Validate
      *
      * @throws InformationException
      */
-    public function checkRequiredParamsForArray(array $required, array $data, ?array $variables = null, $code = 0)
+    public function checkRequiredParamsForArray(array $required, array $data, ?array $variables = null, $code = 0): void
     {
         foreach ($required as $key => $msg) {
             if (!isset($data[$key])) {
@@ -179,9 +187,9 @@ class Validate
         }
     }
 
-    public function isBirthdayValid($birthday = '')
+    public function isBirthdayValid($birthday = ''): bool
     {
-        if (strlen(trim($birthday)) > 0 && strtotime($birthday) === false) {
+        if (strlen(trim((string) $birthday)) > 0 && strtotime((string) $birthday) === false) {
             $friendlyName = ucfirst(__trans('Birthdate'));
 
             throw new Exception(':friendlyName: is invalid', [':friendlyName:' => $friendlyName]);

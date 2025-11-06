@@ -11,12 +11,18 @@
 
 namespace Box\Mod\Theme\Model;
 
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
+
 class Theme
 {
+    private readonly Filesystem $filesystem;
+
     public function __construct(private $name)
     {
-        if (!file_exists($this->getPath())) {
-            throw new \FOSSBilling\Exception('Theme ":name" does not exist', [':name' => $name]);
+        $this->filesystem = new Filesystem();
+        if (!$this->filesystem->exists($this->getPath())) {
+            throw new \FOSSBilling\Exception("Theme ':name' does not exist.", [':name' => $name]);
         }
     }
 
@@ -25,29 +31,14 @@ class Theme
         return $this->name;
     }
 
-    public function isAdminAreaTheme()
+    public function isAdminAreaTheme(): bool
     {
-        return str_contains($this->name, 'admin_');
+        return str_contains((string) $this->name, 'admin_');
     }
 
-    public function isAssetsPathWritable()
+    public function isAssetsPathWritable(): bool
     {
         return is_writable($this->getPathAssets());
-    }
-
-    /**
-     * @return mixed[][]|string[]
-     */
-    public function getSnippets(): array
-    {
-        $path = $this->getPathHtml();
-        $snippets = glob($path . DIRECTORY_SEPARATOR . 'snippet_*.html.twig');
-        $result = [];
-        foreach ($snippets as $snippet) {
-            $result[basename($snippet)] = str_replace('snippet_', '', pathinfo($snippet, PATHINFO_FILENAME));
-        }
-
-        return $result;
     }
 
     /**
@@ -59,10 +50,10 @@ class Theme
         $files = $this->getSettingsPageFiles();
         $uploaded = [];
         foreach ($files as $file) {
-            if (file_exists($assets_folder . DIRECTORY_SEPARATOR . $file)) {
+            if ($this->filesystem->exists(Path::join($assets_folder, $file))) {
                 $uploaded[] = [
                     'name' => $file,
-                    'url' => $this->getUrl() . '/assets/' . $file,
+                    'url' => $this->getUrl() . "/assets/{$file}",
                 ];
             }
         }
@@ -97,21 +88,21 @@ class Theme
      */
     public function getSettingsPageHtml()
     {
-        $spp = $this->getPathConfig() . DIRECTORY_SEPARATOR . 'settings.html';
-        if (!file_exists($spp)) {
+        $spp = Path::join($this->getPathConfig(), 'settings.html.twig');
+        if (!$this->filesystem->exists($spp)) {
             error_log('Theme ' . $this->getName() . ' does not have settings page');
 
             return '';
         }
 
-        $settings_page = file_get_contents($spp);
+        $settings_page = $this->filesystem->readFile($spp);
         $settings_page = $this->strip_tags_content($settings_page, '<script><style>');
 
         // remove style attributes
-        $settings_page = preg_replace('/(<[^>]+) style=".*?"/i', '$1', $settings_page);
+        $settings_page = preg_replace('/(<[^>]+) style=".*?"/i', '$1', (string) $settings_page);
 
         // fix unclosed text area
-        $settings_page = preg_replace('/<textarea (.*)\/>/i', '<textarea $1></textarea>', $settings_page);
+        $settings_page = preg_replace('/<textarea (.*)\/>/i', '<textarea $1></textarea>', (string) $settings_page);
 
         return $settings_page;
     }
@@ -119,17 +110,13 @@ class Theme
     private function getSettingsData()
     {
         $cp = $this->getPathSettingsDataFile();
-        if (!file_exists($cp)) {
+        if (!$this->filesystem->exists($cp)) {
             return [];
         }
 
-        $json = file_get_contents($cp);
-        $array = json_decode($json, 1);
-        if (!is_array($array)) {
-            return [];
-        }
+        $json = $this->filesystem->readFile($cp);
 
-        return $array;
+        return json_decode($json, true) ?? [];
     }
 
     public function getPresetsFromSettingsDataFile()
@@ -153,34 +140,34 @@ class Theme
         return (is_array($array) && isset($array[$preset])) ? $array[$preset] : [];
     }
 
-    public function getUrl()
+    public function getUrl(): string
     {
-        return SYSTEM_URL . 'themes/' . $this->name;
+        return SYSTEM_URL . "themes/{$this->name}";
     }
 
-    public function getPath()
+    public function getPath(): string
     {
-        return PATH_THEMES . DIRECTORY_SEPARATOR . $this->name;
+        return Path::join(PATH_THEMES, $this->name);
     }
 
-    public function getPathConfig()
+    public function getPathConfig(): string
     {
-        return $this->getPath() . DIRECTORY_SEPARATOR . 'config';
+        return Path::join($this->getPath(), 'config');
     }
 
-    public function getPathAssets()
+    public function getPathAssets(): string
     {
-        return $this->getPath() . DIRECTORY_SEPARATOR . 'assets';
+        return Path::join($this->getPath(), 'assets');
     }
 
-    public function getPathHtml()
+    public function getPathHtml(): string
     {
-        return $this->getPath() . DIRECTORY_SEPARATOR . 'html';
+        return Path::join($this->getPath(), 'html');
     }
 
-    public function getPathSettingsDataFile()
+    public function getPathSettingsDataFile(): string
     {
-        return $this->getPathConfig() . DIRECTORY_SEPARATOR . 'settings_data.json';
+        return Path::join($this->getPathConfig(), 'settings_data.json');
     }
 
     /**
@@ -188,7 +175,7 @@ class Theme
      */
     private function strip_tags_content($text, $tags = '', $invert = true)
     {
-        preg_match_all('/<(.+?)[\s]*\/?[\s]*>/si', trim($tags), $tags);
+        preg_match_all('/<(.+?)[\s]*\/?[\s]*>/si', trim((string) $tags), $tags);
         $tags = array_unique($tags[1]);
 
         if (!empty($tags)) {

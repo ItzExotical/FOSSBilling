@@ -13,6 +13,7 @@ namespace Box\Mod\Cron;
 
 use FOSSBilling\Config;
 use FOSSBilling\Environment;
+use Symfony\Component\Filesystem\Path;
 
 class Service
 {
@@ -28,25 +29,23 @@ class Service
         return $this->di;
     }
 
-    public function getCronInfo()
+    public function getCronInfo(): array
     {
         $service = $this->di['mod_service']('system');
 
         return [
-            'cron_path' => PATH_ROOT . DIRECTORY_SEPARATOR . 'cron.php',
+            'cron_path' => Path::join(PATH_ROOT, 'cron.php'),
             'last_cron_exec' => $service->getParamValue('last_cron_exec'),
         ];
     }
 
     /**
-     * @return bool
-     *
      * @todo finish fixing, time to sleep (note: idk what exactly this is referring to. It predates FOSSBilling and is from BoxBilling well before we touched this code)
      */
-    public function runCrons()
+    public function runCrons(): bool
     {
         $api = $this->di['api_system'];
-        $this->di['logger']->setChannel('cron')->info('Started executing cron jobs');
+        $this->di['logger']->setChannel('cron')->info('Started executing cron jobs.');
 
         // @core tasks
         $this->_exec($api, 'hook_batch_connect');
@@ -70,10 +69,10 @@ class Service
 
         // Purge old sessions from the DB
         $count = $this->clearOldSessions() ?? 0;
-        $this->di['logger']->setChannel('cron')->info("Cleared $count outdated sessions from the database");
+        $this->di['logger']->setChannel('cron')->info("Cleared {$count} outdated sessions from the database.");
 
         $this->di['events_manager']->fire(['event' => 'onAfterAdminCronRun']);
-        $this->di['logger']->setChannel('cron')->info('Finished executing cron jobs');
+        $this->di['logger']->setChannel('cron')->info('Finished executing cron jobs.');
 
         return true;
     }
@@ -86,10 +85,10 @@ class Service
         try {
             $api->{$method}($params);
         } catch (\Exception $e) {
-            throw new \Exception($e);
+            throw new \Exception($e->getMessage());
         } finally {
             if (Environment::isCLI()) {
-                echo "\e[32mSuccessfully ran " . $method . '(' . $params . ')' . ".\e[0m\n";
+                echo "\e[32mSuccessfully ran {$method}({$params}).\e[0m\n";
             }
         }
     }
@@ -104,7 +103,7 @@ class Service
         return $service->getParamValue('last_cron_exec');
     }
 
-    public function isLate()
+    public function isLate(): bool
     {
         $t1 = new \DateTime($this->getLastExecutionTime());
         $t2 = new \DateTime('-6min');

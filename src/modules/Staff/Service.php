@@ -108,7 +108,7 @@ class Service implements InjectionAwareInterface
         return $this->di['db']->getCell($sql);
     }
 
-    public function setPermissions($member_id, $array)
+    public function setPermissions($member_id, $array): bool
     {
         $this->checkPermissionsAndThrowException('staff', 'create_and_edit_staff');
 
@@ -130,7 +130,7 @@ class Service implements InjectionAwareInterface
         $stmt = $pdo->prepare($sql);
         $stmt->execute(['id' => $member_id]);
         $json = $stmt->fetchColumn() ?? '';
-        $permissions = json_decode($json, 1);
+        $permissions = json_decode($json, true);
         if (!$permissions) {
             return [];
         }
@@ -162,7 +162,12 @@ class Service implements InjectionAwareInterface
         $modulePermissions = $extensionService->getSpecificModulePermissions($module);
         $permissions = $this->getPermissions($member->id);
 
-        $canAlwaysAccess = $modulePermissions['can_always_access'] ?? false;
+        if ($modulePermissions['hide_permissions'] ?? false) {
+            $canAlwaysAccess = true;
+        } else {
+            $canAlwaysAccess = $modulePermissions['can_always_access'] ?? false;
+        }
+
         if (!$canAlwaysAccess) {
             // They have no permissions or don't have any access to that module
             if (empty($permissions) || !array_key_exists($module, $permissions) || !is_array($permissions[$module]) || !($permissions[$module]['access'] ?? false)) {
@@ -170,15 +175,17 @@ class Service implements InjectionAwareInterface
             }
         }
 
-        // If this passes, the permission key isn't assigned to them and they therefore don't have permission
-        if ((!is_null($key) && !is_array($permissions[$module])) || (!is_null($key) && !array_key_exists($key, $permissions[$module]))) {
-            return false;
-        }
+        if (!is_null($key)) {
+            // If this passes, the permission key isn't assigned to them and they therefore don't have permission
+            if (!is_array($permissions[$module]) || !array_key_exists($key, $permissions[$module])) {
+                return false;
+            }
 
-        if (!is_null($key) && !is_null($constraint)) {
-            return $permissions[$module][$key] === $constraint;
-        } elseif (!is_null($key)) {
-            return (bool) $permissions[$module][$key];
+            if (!is_null($constraint)) {
+                return $permissions[$module][$key] === $constraint;
+            } else {
+                return (bool) $permissions[$module][$key];
+            }
         }
 
         return true;
@@ -198,7 +205,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterClientOrderCreate(\Box_Event $event)
+    public static function onAfterClientOrderCreate(\Box_Event $event): void
     {
         $di = $event->getDi();
         $params = $event->getParameters();
@@ -251,7 +258,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterClientReplyTicket(\Box_Event $event)
+    public static function onAfterClientReplyTicket(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -273,7 +280,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterClientCloseTicket(\Box_Event $event)
+    public static function onAfterClientCloseTicket(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -294,7 +301,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterGuestPublicTicketOpen(\Box_Event $event)
+    public static function onAfterGuestPublicTicketOpen(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -314,7 +321,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterClientSignUp(\Box_Event $event)
+    public static function onAfterClientSignUp(\Box_Event $event): bool
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -335,7 +342,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public static function onAfterGuestPublicTicketReply(\Box_Event $event)
+    public static function onAfterGuestPublicTicketReply(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -355,7 +362,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterGuestPublicTicketClose(\Box_Event $event)
+    public static function onAfterGuestPublicTicketClose(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $di = $event->getDi();
@@ -383,12 +390,12 @@ class Service implements InjectionAwareInterface
 
         $di = $this->getDi();
         $pager = $di['pager'];
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
 
-        return $pager->getSimpleResultSet($query, $params, $per_page);
+        return $pager->getPaginatedResultSet($query, $params, $per_page);
     }
 
-    public function getSearchQuery($data)
+    public function getSearchQuery($data): array
     {
         $query = 'SELECT * FROM admin';
 
@@ -478,7 +485,7 @@ class Service implements InjectionAwareInterface
         return $data;
     }
 
-    public function update(\Model_Admin $model, $data)
+    public function update(\Model_Admin $model, $data): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminStaffUpdate', 'params' => ['id' => $model->id]]);
 
@@ -503,7 +510,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function delete(\Model_Admin $model)
+    public function delete(\Model_Admin $model): bool
     {
         if ($model->protected) {
             throw new \FOSSBilling\InformationException('This administrator account is protected and cannot be removed');
@@ -527,7 +534,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function changePassword(\Model_Admin $model, $password)
+    public function changePassword(\Model_Admin $model, $password): bool
     {
         if ($model->role === 'admin') {
             $this->checkPermissionsAndThrowException('staff', 'reset_admin_password');
@@ -551,7 +558,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function create(array $data)
+    public function create(array $data): int
     {
         // TODO: When it becomes possible to create other super admins, add a check for that here,
         $this->checkPermissionsAndThrowException('staff', 'create_and_edit_staff');
@@ -577,7 +584,7 @@ class Service implements InjectionAwareInterface
         try {
             $newId = $this->di['db']->store($model);
         } catch (\RedBeanPHP\RedException) {
-            throw new \FOSSBilling\InformationException('Staff member with email :email is already registered', [':email' => $data['email']], 788954);
+            throw new \FOSSBilling\InformationException('Staff member with email :email is already registered.', [':email' => $data['email']], 788954);
         }
 
         $this->di['events_manager']->fire(['event' => 'onAfterAdminStaffCreate', 'params' => ['id' => $newId]]);
@@ -627,7 +634,7 @@ class Service implements InjectionAwareInterface
         return $result;
     }
 
-    public function getAdminGroupSearchQuery($data)
+    public function getAdminGroupSearchQuery($data): array
     {
         $sql = 'SELECT *
                 FROM admin_group
@@ -636,7 +643,7 @@ class Service implements InjectionAwareInterface
         return [$sql, []];
     }
 
-    public function createGroup($name)
+    public function createGroup($name): int
     {
         $this->checkPermissionsAndThrowException('staff', 'manage_groups');
 
@@ -666,7 +673,7 @@ class Service implements InjectionAwareInterface
         return $data;
     }
 
-    public function deleteGroup(\Model_AdminGroup $model)
+    public function deleteGroup(\Model_AdminGroup $model): bool
     {
         $this->checkPermissionsAndThrowException('staff', 'manage_groups');
 
@@ -690,7 +697,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function updateGroup(\Model_AdminGroup $model, $data)
+    public function updateGroup(\Model_AdminGroup $model, $data): bool
     {
         $this->checkPermissionsAndThrowException('staff', 'manage_groups');
 
@@ -705,7 +712,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function getActivityAdminHistorySearchQuery($data)
+    public function getActivityAdminHistorySearchQuery($data): array
     {
         $sql = 'SELECT m.*, a.email, a.name
                 FROM activity_admin_history as m
@@ -756,7 +763,7 @@ class Service implements InjectionAwareInterface
         return $result;
     }
 
-    public function deleteLoginHistory(\Model_ActivityAdminHistory $model)
+    public function deleteLoginHistory(\Model_ActivityAdminHistory $model): bool
     {
         $this->di['db']->trash($model);
 

@@ -31,9 +31,12 @@ class ClientTest extends \BBTestCase
             ],
         ];
 
-        $pagerMock = $this->getMockBuilder('\Box_Pagination')->disableOriginalConstructor()->getMock();
+        $pagerMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pagerMock->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn($simpleResultArr);
 
         $model = new \Model_ClientBalance();
@@ -44,7 +47,7 @@ class ClientTest extends \BBTestCase
             ->willReturn($model);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn ($name) => $serviceMock);
+        $di['mod_service'] = $di->protect(fn ($name): \PHPUnit\Framework\MockObject\MockObject => $serviceMock);
         $di['pager'] = $pagerMock;
         $di['db'] = $dbMock;
 
@@ -70,7 +73,7 @@ class ClientTest extends \BBTestCase
             ->willReturn($balanceAmount);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn ($name, $sub) => $serviceMock);
+        $di['mod_service'] = $di->protect(fn ($name, $sub): \PHPUnit\Framework\MockObject\MockObject => $serviceMock);
 
         $api = new Client();
         $api->setDi($di);

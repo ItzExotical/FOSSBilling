@@ -70,7 +70,7 @@ class Box_Event implements ArrayAccess, FOSSBilling\InjectionAwareInterface
      *
      * @param mixed $value The return value
      */
-    public function setReturnValue(mixed $value)
+    public function setReturnValue(mixed $value): void
     {
         $this->value = $value;
     }
@@ -90,7 +90,7 @@ class Box_Event implements ArrayAccess, FOSSBilling\InjectionAwareInterface
      *
      * @param bool $processed The processed flag value
      */
-    public function setProcessed($processed)
+    public function setProcessed($processed): void
     {
         $this->processed = (bool) $processed;
     }
@@ -137,7 +137,7 @@ class Box_Event implements ArrayAccess, FOSSBilling\InjectionAwareInterface
     public function offsetGet(mixed $name): mixed
     {
         if (!array_key_exists($name, $this->parameters)) {
-            throw new InvalidArgumentException(sprintf('The event "%s" has no "%s" parameter.', $this->name, $name));
+            throw new InvalidArgumentException("The event '{$this->name}' has no '{$name}' parameter.");
         }
 
         return $this->parameters[$name];
@@ -156,7 +156,7 @@ class Box_Event implements ArrayAccess, FOSSBilling\InjectionAwareInterface
 
     /**
      * Removes a parameter (implements the ArrayAccess interface).
-     * This doesn't do anything!
+     * (doesn't actually remove anything).
      *
      * @param string $name The parameter name
      */

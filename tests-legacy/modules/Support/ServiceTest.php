@@ -2,6 +2,8 @@
 
 namespace Box\Tests\Mod\Support;
 
+use Symfony\Component\HttpFoundation\Request;
+
 class ServiceTest extends \BBTestCase
 {
     /**
@@ -440,7 +442,7 @@ class ServiceTest extends \BBTestCase
         $this->assertInstanceOf('Model_SupportTicket', $result);
     }
 
-    public static function getSearchQueryProvider()
+    public static function getSearchQueryProvider(): array
     {
         return [
             [
@@ -481,7 +483,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('getSearchQueryProvider')]
-    public function testGetSearchQuery($data): void
+    public function testGetSearchQuery(array $data): void
     {
         $di = new \Pimple\Container();
 
@@ -621,7 +623,7 @@ class ServiceTest extends \BBTestCase
         $this->assertFalse($result);
     }
 
-    public static function closeTicketProvider()
+    public static function closeTicketProvider(): array
     {
         return [
             [new \Model_Admin()],
@@ -630,7 +632,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('closeTicketProvider')]
-    public function testCloseTicket($identity): void
+    public function testCloseTicket(\Model_Admin|\Model_Client $identity): void
     {
         $dbMock = $this->getMockBuilder('\Box_Database')->disableOriginalConstructor()->getMock();
         $dbMock->expects($this->atLeastOnce())
@@ -749,7 +751,7 @@ class ServiceTest extends \BBTestCase
         $dbMock = $this->getMockBuilder('\Box_Database')->disableOriginalConstructor()->getMock();
         $dbMock->expects($this->exactly(2))
             ->method('find')
-            ->willReturnCallback(fn (...$args) => match ($args[0]) {
+            ->willReturnCallback(fn (...$args): \Model_SupportTicketNote|\Model_SupportTicketMessage => match ($args[0]) {
                 'SupportTicketNote' => new \Model_SupportTicketNote(),
                 'SupportTicketMessage' => new \Model_SupportTicketMessage(),
             });
@@ -783,7 +785,7 @@ class ServiceTest extends \BBTestCase
             ->willReturn($supportTicketMessageModel);
         $dbMock->expects($this->atleastOnce())
             ->method('load')
-            ->willReturnCallback(fn (...$args) => match ($args[0]) {
+            ->willReturnCallback(fn (...$args): \Model_SupportHelpdesk|\Model_Client => match ($args[0]) {
                 'SupportHelpdesk' => $helpdesk,
                 'Client' => new \Model_Client(),
             });
@@ -898,7 +900,7 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['mod_service'] = $di->protect(fn () => $clientServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $clientServiceMock);
         $this->service->setDi($di);
 
         $ticket = new \Model_SupportTicket();
@@ -924,7 +926,7 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['mod_service'] = $di->protect(fn () => $clientServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $clientServiceMock);
         $this->service->setDi($di);
 
         $ticket = new \Model_SupportTicket();
@@ -1275,7 +1277,7 @@ class ServiceTest extends \BBTestCase
         $this->assertTrue($result);
     }
 
-    public static function ticketReplyProvider()
+    public static function ticketReplyProvider(): array
     {
         $admin = new \Model_Admin();
         $admin->loadBean(new \DummyBean());
@@ -1292,7 +1294,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('ticketReplyProvider')]
-    public function testTicketReply($identity): void
+    public function testTicketReply(\Model_Admin|\Model_Client $identity): void
     {
         $message = new \Model_SupportTicketMessage();
         $message->loadBean(new \DummyBean());
@@ -1312,7 +1314,7 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
+        $di['request'] = Request::createFromGlobals();
         $di['events_manager'] = $eventMock;
         $this->service->setDi($di);
 
@@ -1344,7 +1346,7 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
+        $di['request'] = Request::createFromGlobals();
         $di['events_manager'] = $eventMock;
 
         $this->service->setDi($di);
@@ -1419,8 +1421,8 @@ class ServiceTest extends \BBTestCase
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
         $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
         $di['events_manager'] = $eventMock;
-        $di['mod'] = $di->protect(fn () => $supportModMock);
-        $di['mod_service'] = $di->protect(fn () => $staffServiceMock);
+        $di['mod'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $supportModMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $staffServiceMock);
 
         $serviceMock->setDi($di);
 
@@ -1487,7 +1489,7 @@ class ServiceTest extends \BBTestCase
         $serviceMock->ticketCreateForClient($client, $helpdesk, $data);
     }
 
-    public static function messageCreateForTicketProvider()
+    public static function messageCreateForTicketProvider(): array
     {
         $admin = new \Model_Admin();
         $admin->loadBean(new \DummyBean());
@@ -1508,7 +1510,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('messageCreateForTicketProvider')]
-    public function testMessageCreateForTicket($identity): void
+    public function testMessageCreateForTicket(\Model_Admin|\Model_Client $identity): void
     {
         $randId = random_int(1, 100);
         $supportTicketMessage = new \Model_SupportTicketMessage();
@@ -1524,7 +1526,7 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
+        $di['request'] = Request::createFromGlobals();
         $this->service->setDi($di);
 
         $ticket = new \Model_SupportTicket();
@@ -1608,7 +1610,7 @@ class ServiceTest extends \BBTestCase
         $this->assertInstanceOf('Model_SupportPTicket', $result);
     }
 
-    public static function publicGetSearchQueryProvider()
+    public static function publicGetSearchQueryProvider(): array
     {
         return [
             [
@@ -1637,7 +1639,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('publicGetSearchQueryProvider')]
-    public function testPublicGetSearchQuery($data): void
+    public function testPublicGetSearchQuery(array $data): void
     {
         $di = new \Pimple\Container();
 
@@ -1719,7 +1721,7 @@ class ServiceTest extends \BBTestCase
         $this->assertInstanceOf('Model_SupportPTicket', $result[0]);
     }
 
-    public static function publicCloseTicketProvider()
+    public static function publicCloseTicketProvider(): array
     {
         return [
             [new \Model_Admin()],
@@ -1728,7 +1730,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('publicCloseTicketProvider')]
-    public function testPublicCloseTicket($identity): void
+    public function testPublicCloseTicket(\Model_Admin|\Model_Guest $identity): void
     {
         $dbMock = $this->getMockBuilder('\Box_Database')->disableOriginalConstructor()->getMock();
         $dbMock->expects($this->atLeastOnce())
@@ -1792,7 +1794,7 @@ class ServiceTest extends \BBTestCase
         $this->assertTrue($result);
     }
 
-    public static function publicToApiArrayProvider()
+    public static function publicToApiArrayProvider(): array
     {
         $self = new ServiceTest('ServiceTest');
 
@@ -1809,7 +1811,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('publicToApiArrayProvider')]
-    public function testPublicToApiArray($findOne, $publicMessageGetAuthorDetailsCalled): void
+    public function testPublicToApiArray(?\Model_SupportPTicketMessage $findOne, \PHPUnit\Framework\MockObject\Rule\InvokedAtLeastOnce|\PHPUnit\Framework\MockObject\Rule\InvokedCount $publicMessageGetAuthorDetailsCalled): void
     {
         $ticketMessages = [new \Model_SupportPTicketMessage(), new \Model_SupportPTicketMessage()];
 
@@ -1946,9 +1948,9 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
         $di['events_manager'] = $eventMock;
         $di['tools'] = $toolsMock;
+        $di['request'] = Request::createFromGlobals();
         $this->service->setDi($di);
 
         $admin = new \Model_Admin();
@@ -2015,8 +2017,8 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
         $di['events_manager'] = $eventMock;
+        $di['request'] = Request::createFromGlobals();
         $this->service->setDi($di);
 
         $ticket = new \Model_SupportPTicket();
@@ -2050,8 +2052,8 @@ class ServiceTest extends \BBTestCase
         $di = new \Pimple\Container();
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['request'] = $this->getMockBuilder('\\' . \FOSSBilling\Request::class)->getMock();
         $di['events_manager'] = $eventMock;
+        $di['request'] = Request::createFromGlobals();
         $this->service->setDi($di);
 
         $ticket = new \Model_SupportPTicket();
@@ -2317,13 +2319,13 @@ class ServiceTest extends \BBTestCase
             ->method('store')
             ->willReturn($randId);
 
-        $settingsServiceMock = $this->getMockBuilder('\\' . \Box\Mod\Email\Service::class)
-            ->addMethods(['checkLimits'])->getMock();
-        $settingsServiceMock->expects($this->atLeastOnce())->method('checkLimits')
+        $systemServiceMock = $this->getMockBuilder('\\' . \Box\Mod\System\Service::class)
+            ->onlyMethods(['checkLimits'])->getMock();
+        $systemServiceMock->expects($this->atLeastOnce())->method('checkLimits')
             ->willReturn(null);
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $settingsServiceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemServiceMock);
         $di['db'] = $dbMock;
         $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
         $this->service->setDi($di);
@@ -2480,7 +2482,7 @@ class ServiceTest extends \BBTestCase
         $this->assertTrue($result);
     }
 
-    public static function canClientSubmitNewTicketProvider()
+    public static function canClientSubmitNewTicketProvider(): array
     {
         $ticket = new \Model_SupportTicket();
         $ticket->loadBean(new \DummyBean());
@@ -2500,7 +2502,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('canClientSubmitNewTicketProvider')]
-    public function testCanClientSubmitNewTicket($ticket, $hours, $expected): void
+    public function testCanClientSubmitNewTicket(?\Model_SupportTicket $ticket, int $hours, bool $expected): void
     {
         if (!$expected) {
             $this->expectException(\FOSSBilling\Exception::class);
@@ -2541,9 +2543,12 @@ class ServiceTest extends \BBTestCase
 
         $di = new \Pimple\Container();
 
-        $pager = $this->getMockBuilder('Box_Pagination')->getMock();
+        $pager = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pager->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn($willReturn);
 
         $client = new \Model_Client();
@@ -2663,7 +2668,7 @@ class ServiceTest extends \BBTestCase
         $this->assertNull($result);
     }
 
-    public static function kbToApiArrayProvider()
+    public static function kbToApiArrayProvider(): array
     {
         $model = new \Model_SupportKbArticle();
         $model->loadBean(new \DummyBean());
@@ -2751,7 +2756,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('kbToApiArrayProvider')]
-    public function testKbToApiArray($model, $expected, $deep, $identity, $category): void
+    public function testKbToApiArray(\Model_SupportKbArticle $model, array $expected, bool $deep, ?\Model_Admin $identity, \Model_SupportKbArticleCategory $category): void
     {
         $service = new \Box\Mod\Support\Service();
 
@@ -2861,7 +2866,7 @@ class ServiceTest extends \BBTestCase
         $this->assertTrue($result);
     }
 
-    public static function kbCategoryGetSearchQueryProvider()
+    public static function kbCategoryGetSearchQueryProvider(): array
     {
         return [
             [
@@ -2915,7 +2920,7 @@ class ServiceTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('kbCategoryGetSearchQueryProvider')]
-    public function testKbCategoryGetSearchQuery($data, $query, $bindings): void
+    public function testKbCategoryGetSearchQuery(array $data, string $query, array $bindings): void
     {
         $service = new \Box\Mod\Support\Service();
 
@@ -2928,7 +2933,7 @@ class ServiceTest extends \BBTestCase
         $this->assertIsString($result[0]);
         $this->assertIsArray($result[1]);
 
-        $this->assertEquals(trim(preg_replace('/\s+/', '', str_replace("\n", ' ', $result[0]))), trim(preg_replace('/\s+/', '', str_replace("\n", ' ', $query))));
+        $this->assertEquals(trim((string) preg_replace('/\s+/', '', str_replace("\n", ' ', $result[0]))), trim((string) preg_replace('/\s+/', '', str_replace("\n", ' ', $query))));
         $this->assertEquals($result[1], $bindings);
     }
 
@@ -3046,7 +3051,7 @@ class ServiceTest extends \BBTestCase
         $di['db'] = $db;
         $di['tools'] = $tools;
         $di['logger'] = $di['logger'] = $this->getMockBuilder('Box_Log')->getMock();
-        $di['mod_service'] = $di->protect(fn () => $systemService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $systemService);
         $service->setDi($di);
 
         $result = $service->kbCreateCategory('Title', 'Description');

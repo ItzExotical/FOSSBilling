@@ -12,6 +12,8 @@
 namespace Box\Mod\Seo;
 
 use FOSSBilling\InjectionAwareInterface;
+use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Finder\Finder;
 
 class Service implements InjectionAwareInterface
 {
@@ -27,7 +29,7 @@ class Service implements InjectionAwareInterface
         return $this->di;
     }
 
-    public function pingSitemap($config, $forced = false)
+    public function pingSitemap($config, $forced = false): bool
     {
         $systemService = $this->di['mod_service']('system');
 
@@ -35,7 +37,7 @@ class Service implements InjectionAwareInterface
         $last_time = $systemService->getParamValue($key);
 
         // Make sure we don't ping more than once a day
-        if ($last_time && (time() - strtotime($last_time)) < 24 * 60 * 60 && !$forced) {
+        if ($last_time && (time() - strtotime((string) $last_time)) < 24 * 60 * 60 && !$forced) {
             return false;
         }
 
@@ -63,10 +65,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return array
-     */
-    public function getInfo()
+    public function getInfo(): array
     {
         $systemService = $this->di['mod_service']('system');
 
@@ -79,10 +78,8 @@ class Service implements InjectionAwareInterface
 
     /**
      * @param string $engine - The ID of the engine to check
-     *
-     * @return bool
      */
-    public function isEngineEnabled($engine)
+    public function isEngineEnabled($engine): bool
     {
         $extensionService = $this->di['mod_service']('extension');
         $config = $extensionService->getConfig('mod_seo');
@@ -96,15 +93,13 @@ class Service implements InjectionAwareInterface
     private function _getEngines(): array
     {
         $engines = [];
-        $dir = __DIR__ . '/Engines';
-        $files = scandir($dir);
+        $finder = new Finder();
 
-        foreach ($files as $file) {
-            if (str_ends_with($file, '.php')) {
-                $engine = substr($file, 0, -4);
-                $class = 'Box\\Mod\\Seo\\Engines\\' . $engine;
-                $engines[$engine] = new $class();
-            }
+        $finder->files()->in(Path::join(__DIR__, 'Engines'))->name('*.php');
+        foreach ($finder as $file) {
+            $engine = $file->getFilenameWithoutExtension();
+            $class = "Box\\Mod\\Seo\\Engines\\{$engine}";
+            $engines[$engine] = new $class();
         }
 
         return $engines;
@@ -128,7 +123,7 @@ class Service implements InjectionAwareInterface
         return $details;
     }
 
-    public static function onBeforeAdminCronRun(\Box_Event $event)
+    public static function onBeforeAdminCronRun(\Box_Event $event): bool
     {
         $di = $event->getDi();
         $extensionService = $di['mod_service']('extension');

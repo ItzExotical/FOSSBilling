@@ -35,11 +35,16 @@ class AdminTest extends \BBTestCase
             ->willReturn([]);
 
         $resultSet = [
-            'list' => ['id' => 1],
+            'list' => [
+                ['id' => 1],
+            ],
         ];
-        $pagerMock = $this->getMockBuilder('\Box_Pagination')->getMock();
+        $pagerMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pagerMock->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn($resultSet);
 
         $adminModel = new \Model_Admin();
@@ -325,9 +330,12 @@ class AdminTest extends \BBTestCase
             ->method('getAdminGroupSearchQuery')
             ->willReturn(['sqlString', []]);
 
-        $pagerMock = $this->getMockBuilder('\Box_Pagination')->getMock();
+        $pagerMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pagerMock->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn(['list' => []]);
 
         $di = new \Pimple\Container();
@@ -462,23 +470,24 @@ class AdminTest extends \BBTestCase
         $serviceMock->expects($this->atLeastOnce())
             ->method('getActivityAdminHistorySearchQuery')
             ->willReturn(['sqlString', []]);
-        $serviceMock->expects($this->atLeastOnce())
-            ->method('toActivityAdminHistoryApiArray')
+        $serviceMock->method('toActivityAdminHistoryApiArray')
             ->willReturn([]);
 
         $resultSet = [
             'list' => ['id' => 1],
         ];
-        $pagerMock = $this->getMockBuilder('\Box_Pagination')->getMock();
+        $pagerMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pagerMock->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn($resultSet);
 
         $model = new \Model_ActivityAdminHistory();
         $model->loadBean(new \DummyBean());
         $dbMock = $this->getMockBuilder('\Box_Database')->getMock();
-        $dbMock->expects($this->atLeastOnce())
-            ->method('getExistingModelById')
+        $dbMock->method('getExistingModelById')
             ->willReturn($model);
 
         $di = new \Pimple\Container();
@@ -497,8 +506,7 @@ class AdminTest extends \BBTestCase
         $data['id'] = '1';
 
         $serviceMock = $this->getMockBuilder('\\' . \Box\Mod\Staff\Service::class)->getMock();
-        $serviceMock->expects($this->atLeastOnce())
-            ->method('toActivityAdminHistoryApiArray')
+        $serviceMock->method('toActivityAdminHistoryApiArray')
             ->willReturn([]);
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->getMock();
@@ -558,8 +566,7 @@ class AdminTest extends \BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;

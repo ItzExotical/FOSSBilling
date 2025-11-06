@@ -9,9 +9,11 @@ abstract class BBDbApiTestCase extends BBDatabaseTestCase
     protected $api_admin;
     protected $api_system;
 
-    public function setBoxUpdateMock()
+    public function setBoxUpdateMock(): void
     {
-        $updatedMock = $this->getMockBuilder('Box_Update')->getMock();
+        $updatedMock = $this->getMockBuilder('Box_Update')
+            ->onlyMethods(['isUpdateAvailable', 'getLatestVersion', 'performUpdate'])
+            ->getMock();
         $updatedMock->expects($this->any())
             ->method('isUpdateAvailable')
             ->willReturn(true);
@@ -48,7 +50,6 @@ abstract class BBDbApiTestCase extends BBDatabaseTestCase
         $refl = new ReflectionObject($this);
         foreach ($refl->getProperties() as $prop) {
             if (!$prop->isStatic() && !str_starts_with($prop->getDeclaringClass()->getName(), 'PHPUnit_')) {
-                $prop->setAccessible(true);
                 $prop->setValue($this, null);
             }
         }

@@ -1,8 +1,8 @@
 <?php
 
+declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
- * Copyright 2011-2021 BoxBilling, Inc.
  * SPDX-License-Identifier: Apache-2.0.
  *
  * @copyright FOSSBilling (https://www.fossbilling.org)
@@ -29,16 +29,17 @@ class Exception extends \Exception
         $logStack = Config::getProperty('debug_and_monitoring.log_stacktrace', true);
         $stackLength = Config::getProperty('debug_and_monitoring.stacktrace_length', 25);
 
-        if (DEBUG && $logStack) {
-            error_log('An exception has been thrown. Stacktrace:');
-            error_log($this->stackTrace($stackLength, $protected));
-        }
-
         // Translate the exception
         if (function_exists('__trans')) {
             $message = __trans($message, $variables);
         } elseif (is_array($variables)) {
             $message = strtr($message, $variables);
+        }
+
+        if (DEBUG && $logStack) {
+            error_log("Exception: $message");
+            error_log('Stack trace:');
+            error_log($this->stackTrace($stackLength, $protected));
         }
 
         // Pass the message to the parent
@@ -50,7 +51,7 @@ class Exception extends \Exception
      * We have slightly modified it for our purposes
      * https://stackoverflow.com/a/32365961.
      */
-    private function stackTrace($Length = 25, $protected = false)
+    private function stackTrace($Length = 25, $protected = false): string
     {
         $stack = debug_backtrace($Length);
         $output = '';

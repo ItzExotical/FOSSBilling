@@ -18,7 +18,7 @@ class Box_EventDispatcher
      * @param string $name     An event name
      * @param mixed  $listener A PHP callable
      */
-    public function connect($name, mixed $listener)
+    public function connect($name, mixed $listener): void
     {
         if (!isset($this->listeners[$name])) {
             $this->listeners[$name] = [];
@@ -38,26 +38,6 @@ class Box_EventDispatcher
     {
         foreach ($this->getListeners($event->getName()) as $listener) {
             call_user_func($listener, $event);
-        }
-
-        return $event;
-    }
-
-    /**
-     * Notifies all listeners of a given event until one returns a non null value.
-     *
-     * @param Box_Event $event A Box_Event instance
-     *
-     * @return Box_Event The Box_Event instance
-     */
-    public function notifyUntil(Box_Event $event)
-    {
-        foreach ($this->getListeners($event->getName()) as $listener) {
-            if (call_user_func($listener, $event)) {
-                $event->setProcessed(true);
-
-                break;
-            }
         }
 
         return $event;
@@ -89,7 +69,7 @@ class Box_EventDispatcher
      *
      * @return bool true if some listeners are connected, false otherwise
      */
-    public function hasListeners($name)
+    public function hasListeners($name): bool
     {
         if (!isset($this->listeners[$name])) {
             $this->listeners[$name] = [];

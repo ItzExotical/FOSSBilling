@@ -16,22 +16,26 @@ class AdminTest extends \BBTestCase
                 ],
             ],
         ];
-        $paginatorMock = $this->getMockBuilder('\Box_Pagination')->disableOriginalConstructor()->getMock();
-        $paginatorMock->expects($this->atLeastOnce())
-                    ->method('getSimpleResultSet')
-                    ->willReturn($simpleResultArr);
 
         $service = $this->getMockBuilder('\\' . \Box\Mod\Activity\Service::class)->getMock();
         $service->expects($this->atLeastOnce())
-                ->method('getSearchQuery')
-                ->willReturn('String');
+            ->method('getSearchQuery')
+            ->willReturn(['String', []]);
+
+        $paginatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+            ->onlyMethods(['getPaginatedResultSet'])
+            ->getMock();
+
+        $paginatorMock->expects($this->atLeastOnce())
+            ->method('getPaginatedResultSet')
+            ->willReturn($simpleResultArr);
 
         $model = new \Model_ActivitySystem();
         $model->loadBean(new \DummyBean());
 
         $di = new \Pimple\Container();
         $di['pager'] = $paginatorMock;
-        $di['mod_service'] = $di->protect(fn () => $service);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $service);
 
         $api = new \Api_Handler(new \Model_Admin());
         $api->setDi($di);
@@ -55,22 +59,26 @@ class AdminTest extends \BBTestCase
                 ],
             ],
         ];
-        $paginatorMock = $this->getMockBuilder('\Box_Pagination')->disableOriginalConstructor()->getMock();
-        $paginatorMock->expects($this->atLeastOnce())
-                    ->method('getSimpleResultSet')
-                    ->willReturn($simpleResultArr);
 
         $service = $this->getMockBuilder('\\' . \Box\Mod\Activity\Service::class)->getMock();
         $service->expects($this->atLeastOnce())
-                ->method('getSearchQuery')
-                ->willReturn('String');
+            ->method('getSearchQuery')
+            ->willReturn(['String', []]);
+
+        $paginatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+            ->onlyMethods(['getPaginatedResultSet'])
+            ->getMock();
+
+        $paginatorMock->expects($this->atLeastOnce())
+            ->method('getPaginatedResultSet')
+            ->willReturn($simpleResultArr);
 
         $model = new \Model_ActivitySystem();
         $model->loadBean(new \DummyBean());
 
         $di = new \Pimple\Container();
         $di['pager'] = $paginatorMock;
-        $di['mod_service'] = $di->protect(fn () => $service);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $service);
 
         $api = new \Api_Handler(new \Model_Admin());
         $api->setDi($di);
@@ -128,7 +136,7 @@ class AdminTest extends \BBTestCase
         $databaseMock->expects($this->atLeastOnce())->
             method('trash');
 
-        $serviceMock = $this->getMockBuilder('\Box\Mod\Staff\Service')->onlyMethods(['hasPermission'])->getMock();
+        $serviceMock = $this->getMockBuilder(\Box\Mod\Staff\Service::class)->onlyMethods(['hasPermission'])->getMock();
         $serviceMock->expects($this->atLeastOnce())
             ->method('hasPermission')
             ->willReturn(true);
@@ -136,11 +144,10 @@ class AdminTest extends \BBTestCase
         $di['db'] = $databaseMock;
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
         $di['validator'] = $validatorMock;
 
-        $di['mod_service'] = $di->protect(fn () => $serviceMock);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $serviceMock);
 
         $activity = new \Box\Mod\Activity\Api\Admin();
         $activity->setDi($di);
@@ -156,8 +163,7 @@ class AdminTest extends \BBTestCase
 
         $validatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Validate::class)->disableOriginalConstructor()->getMock();
         $validatorMock->expects($this->atLeastOnce())
-            ->method('checkRequiredParamsForArray')
-            ->willReturn(null);
+            ->method('checkRequiredParamsForArray');
 
         $di = new \Pimple\Container();
         $di['validator'] = $validatorMock;

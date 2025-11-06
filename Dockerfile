@@ -1,8 +1,8 @@
-FROM php:8.4-apache
+FROM php:8.4-apache@sha256:c9b211e2bd4704ef2473abb3772181e1f88ee02886850f99d44b076868cf99b0
 
-# Install required packages, configure Apache, install PHP exensions, and clean-up.
+# Install required packages, configure Apache, install PHP extensions, and clean-up.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends wget unzip zlib1g-dev libpng-dev libicu-dev libbz2-dev \
+  && apt-get install -y --no-install-recommends wget unzip zlib1g-dev libpng-dev libicu-dev libbz2-dev cron \
   && a2enmod rewrite \
   && docker-php-ext-configure bz2 \
   && docker-php-ext-install -j$(nproc) bz2 \
@@ -19,3 +19,5 @@ RUN apt-get update \
 
 # Copy files and set required permissions.
 COPY --chown=www-data:www-data ./src/. /var/www/html
+
+RUN { crontab -l -u www-data 2>/dev/null; echo "*/5 * * * * /usr/local/bin/php /var/www/html/cron.php"; } | crontab -u www-data -

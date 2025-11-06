@@ -10,10 +10,11 @@ class ServiceTest extends \BBTestCase
 
         $themeService = $this->getMockBuilder('\\' . \Box\Mod\Theme\Service::class)->getMock();
         $themeService->expects($this->atLeastOnce())
-            ->method('getCurrentClientAreaThemeCode');
+            ->method('getCurrentClientAreaThemeCode')
+            ->willReturn('huraga');
 
         $di = new \Pimple\Container();
-        $di['mod_service'] = $di->protect(fn () => $themeService);
+        $di['mod_service'] = $di->protect(fn (): \PHPUnit\Framework\MockObject\MockObject => $themeService);
 
         $service->setDi($di);
         $result = $service->getPairs();

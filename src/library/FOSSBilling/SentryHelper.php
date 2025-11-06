@@ -3,7 +3,6 @@
 declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
- * Copyright 2011-2021 BoxBilling, Inc.
  * SPDX-License-Identifier: Apache-2.0.
  *
  * @copyright FOSSBilling (https://www.fossbilling.org)
@@ -18,6 +17,7 @@ use Sentry\HttpClient\HttpClientInterface;
 use Sentry\HttpClient\Request;
 use Sentry\HttpClient\Response;
 use Sentry\Options;
+use Symfony\Component\Filesystem\Path;
 use Symfony\Component\HttpClient\HttpClient;
 
 class SentryHelper
@@ -67,7 +67,6 @@ class SentryHelper
         'servicehosting',
         'servicelicense',
         'servicemembership',
-        // 'serviceproxmox',
         'spamchecker',
         'staff',
         'stats',
@@ -85,6 +84,8 @@ class SentryHelper
 
     // Array containing instance IDs that are blacklisted from error reporting and a timestamp of when their blacklist expires.
     private static array $blacklistedInstances = [
+        '49f78ad3-9e99-492d-aa86-09ba959b16ee' => '2025-08-21',
+        '40ea07d8-84db-49a0-8dcc-7ef53f9a38be' => '2025-12-01',
     ];
 
     private static string $placeholderFirstHalf = '--replace--this--';
@@ -147,13 +148,13 @@ class SentryHelper
                     $event->setTag('exception.category', $errorInfo['category']);
 
                     // Tag the module name
-                    if (str_starts_with($exceptionPath, PATH_MODS)) {
+                    if (str_starts_with($exceptionPath, (string) PATH_MODS)) {
                         $module = self::extractName($exceptionPath, PATH_MODS);
                         $event->setTag('module.name', $module);
                     }
 
                     // Tag the theme name
-                    if (str_starts_with($exceptionPath, PATH_THEMES)) {
+                    if (str_starts_with($exceptionPath, (string) PATH_THEMES)) {
                         $theme = self::extractName($exceptionPath, PATH_THEMES);
                         $event->setTag('theme.name', $theme);
                     }
@@ -200,7 +201,7 @@ class SentryHelper
         \Sentry\init($options);
     }
 
-    private static function extractName(string $exceptionPath, string $path)
+    private static function extractName(string $exceptionPath, string $path): string
     {
         $strippedPath = str_replace($path, '', $exceptionPath);
         $level = 0;
@@ -218,9 +219,9 @@ class SentryHelper
         return $name;
     }
 
-    private static function getLibrary(string $exceptionPath)
+    private static function getLibrary(string $exceptionPath): string
     {
-        return pathinfo($exceptionPath, PATHINFO_FILENAME);
+        return Path::getFilenameWithoutExtension($exceptionPath);
     }
 
     /**
@@ -229,11 +230,11 @@ class SentryHelper
     public static function estimateWebServer(): string
     {
         $serverSoftware = $_SERVER['SERVER_SOFTWARE'] ?? '';
-        if (function_exists('apache_get_version') || (stripos(strtolower($serverSoftware), 'apache') !== false)) {
+        if (function_exists('apache_get_version') || (stripos(strtolower((string) $serverSoftware), 'apache') !== false)) {
             return 'Apache';
-        } elseif (stripos(strtolower($serverSoftware), 'litespeed') !== false) {
+        } elseif (stripos(strtolower((string) $serverSoftware), 'litespeed') !== false) {
             return 'Litespeed';
-        } elseif (stripos(strtolower($serverSoftware), 'nginx') !== false) {
+        } elseif (stripos(strtolower((string) $serverSoftware), 'nginx') !== false) {
             return 'NGINX';
         } elseif (PHP_SAPI === 'cli-server') {
             return 'PHP Development Server';
@@ -248,7 +249,7 @@ class SentryHelper
             return true;
         }
 
-        if (in_array(INSTANCE_ID, self::$blacklistedInstances) && strtotime(self::$blacklistedInstances[INSTANCE_ID]) >= time()) {
+        if (in_array(INSTANCE_ID, self::$blacklistedInstances) && strtotime((string) self::$blacklistedInstances[INSTANCE_ID]) >= time()) {
             return true;
         }
 

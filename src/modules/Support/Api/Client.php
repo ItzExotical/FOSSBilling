@@ -32,8 +32,8 @@ class Client extends \Api_Abstract
         $data['client_id'] = $identity->id;
 
         [$sql, $bindings] = $this->getService()->getSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getAdvancedResultSet($sql, $bindings, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $bindings, $per_page);
         foreach ($pager['list'] as $key => $ticketArr) {
             $ticket = $this->di['db']->getExistingModelById('SupportTicket', $ticketArr['id'], 'Ticket not found');
             $pager['list'][$key] = $this->getService()->toApiArray($ticket, true, $this->getIdentity());
@@ -89,7 +89,7 @@ class Client extends \Api_Abstract
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
 
-        $data['content'] = preg_replace('/javascript:\/\/|\%0(d|a)/i', '', $data['content']);
+        $data['content'] = preg_replace('/javascript:\/\/|\%0(d|a)/i', '', (string) $data['content']);
 
         $helpdesk = $this->di['db']->getExistingModelById('SupportHelpdesk', $data['support_helpdesk_id'], 'Helpdesk invalid');
 
@@ -100,10 +100,8 @@ class Client extends \Api_Abstract
 
     /**
      * Add new conversation message to ticket. Ticket will be reopened if closed.
-     *
-     * @return bool
      */
-    public function ticket_reply($data)
+    public function ticket_reply($data): bool
     {
         $required = [
             'id' => 'Ticket ID required',
@@ -111,7 +109,7 @@ class Client extends \Api_Abstract
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
 
-        $data['content'] = preg_replace('/javascript:\/\/|\%0(d|a)/i', '', $data['content']);
+        $data['content'] = preg_replace('/javascript:\/\/|\%0(d|a)/i', '', (string) $data['content']);
 
         $client = $this->getIdentity();
 

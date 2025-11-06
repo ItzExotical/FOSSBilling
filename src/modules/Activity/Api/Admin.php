@@ -27,9 +27,9 @@ class Admin extends \Api_Abstract
     public function log_get_list($data)
     {
         $data['no_debug'] = true;
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
         [$sql, $params] = $this->getService()->getSearchQuery($data);
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
 
         foreach ($pager['list'] as $key => $item) {
             if (isset($item['staff_id'])) {
@@ -51,10 +51,8 @@ class Admin extends \Api_Abstract
      * Add a message to the log.
      *
      * @param array $data Message data
-     *
-     * @return bool
      */
-    public function log($data)
+    public function log($data): bool
     {
         if (!isset($data['m'])) {
             return false;
@@ -69,7 +67,7 @@ class Admin extends \Api_Abstract
         $entry->message = $data['m'];
         $entry->created_at = date('Y-m-d H:i:s');
         $entry->updated_at = date('Y-m-d H:i:s');
-        $entry->ip = $this->di['request']->getClientAddress();
+        $entry->ip = $this->di['request']->getClientIp();
         $this->di['db']->store($entry);
 
         return true;
@@ -107,7 +105,7 @@ class Admin extends \Api_Abstract
      *
      * @return bool True if the message was deleted, false otherwise
      */
-    public function log_delete($data)
+    public function log_delete($data): bool
     {
         $required = [
             'id' => 'ID is required',
@@ -130,7 +128,7 @@ class Admin extends \Api_Abstract
      *
      * @return bool True if the messages were deleted, false otherwise
      */
-    public function batch_delete($data)
+    public function batch_delete($data): bool
     {
         $required = [
             'ids' => 'IDs not passed',

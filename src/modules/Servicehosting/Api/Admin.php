@@ -18,10 +18,8 @@ class Admin extends \Api_Abstract
 {
     /**
      * Change hosting account plan.
-     *
-     * @return bool
      */
-    public function change_plan($data)
+    public function change_plan($data): bool
     {
         if (!isset($data['plan_id'])) {
             throw new \FOSSBilling\Exception('plan_id is missing');
@@ -37,10 +35,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Change hosting account username.
-     *
-     * @return bool
      */
-    public function change_username($data)
+    public function change_username($data): bool
     {
         [$order, $s] = $this->_getService($data);
         $service = $this->getService();
@@ -50,10 +46,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Change hosting account ip.
-     *
-     * @return bool
      */
-    public function change_ip($data)
+    public function change_ip($data): bool
     {
         [$order, $s] = $this->_getService($data);
         $service = $this->getService();
@@ -63,10 +57,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Change hosting account domain.
-     *
-     * @return bool
      */
-    public function change_domain($data)
+    public function change_domain($data): bool
     {
         [$order, $s] = $this->_getService($data);
         $service = $this->getService();
@@ -76,10 +68,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Change hosting account password.
-     *
-     * @return bool
      */
-    public function change_password($data)
+    public function change_password($data): bool
     {
         [$order, $s] = $this->_getService($data);
         $service = $this->getService();
@@ -89,10 +79,8 @@ class Admin extends \Api_Abstract
 
     /**
      * Synchronize account with server values.
-     *
-     * @return bool
      */
-    public function sync($data)
+    public function sync($data): bool
     {
         [$order, $s] = $this->_getService($data);
         $service = $this->getService();
@@ -106,10 +94,8 @@ class Admin extends \Api_Abstract
      *
      * @optional string $username - Hosting account username
      * @optional string $ip - Hosting account ip
-     *
-     * @return bool
      */
-    public function update($data)
+    public function update($data): bool
     {
         [, $s] = $this->_getService($data);
         $service = $this->getService();
@@ -138,23 +124,59 @@ class Admin extends \Api_Abstract
     }
 
     /**
-     * Get paginated list of servers.
+     * Get a paginated list of servers.
      *
      * @return array
      */
     public function server_get_list($data)
     {
-        $servers = $this->di['db']->find('ServiceHostingServer', 'ORDER BY id ASC');
-        $serversArr = [];
-        foreach ($servers as $server) {
-            $serversArr[] = $this->getService()->toHostingServerApiArray($server, false, $this->getIdentity());
+        [$sql, $params] = $this->getService()->getServersSearchQuery($data);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $result = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
+
+        foreach ($result['list'] as $key => $server) {
+            $bean = $this->di['db']->dispense('ServiceHostingServer')->unbox();
+            $bean->import($server);
+            $model = $bean->box();
+
+            $result['list'][$key] = $this->getService()->toHostingServerApiArray($model, false, $this->getIdentity());
         }
 
-        [$sql, $params] = $this->getService()->getServersSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $result = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        return $result;
+    }
 
-        $result['list'] = $serversArr;
+    /**
+     * Get a paginated list of hosting accounts, along with the "order" and "client" information.
+     *
+     * @param $data array Accepts the optional "server_id" property
+     *
+     * @return array
+     */
+    public function account_get_list($data)
+    {
+        [$sql, $params] = $this->getService()->getAccountsSearchQuery($data);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $result = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
+        $orderService = $this->di['mod_service']('order');
+
+        foreach ($result['list'] as $key => $account) {
+            $bean = $this->di['db']->dispense('ServiceHosting')->unbox();
+            $bean->import($account);
+            $model = $bean->box();
+
+            $order = $this->di['db']->findOne('ClientOrder', 'service_type = "hosting" AND service_id = :service_id', [':service_id' => $model->id]);
+
+            $result['list'][$key] = $this->getService()->toHostingAccountApiArray($model, true, $this->getIdentity());
+
+            if ($order) {
+                $result['list'][$key]['order'] = $orderService->toApiArray($order);
+                $result['list'][$key]['client'] = $result['list'][$key]['order']['client'];
+
+                unset($result['list'][$key]['order']['client']);
+            } else {
+                $result['list'][$key]['order'] = null;
+            }
+        }
 
         return $result;
     }
@@ -179,7 +201,7 @@ class Admin extends \Api_Abstract
      *
      * @throws \FOSSBilling\Exception
      */
-    public function server_create($data)
+    public function server_create($data): int
     {
         $required = [
             'name' => 'Server name is missing',
@@ -216,11 +238,9 @@ class Admin extends \Api_Abstract
     /**
      * Delete server.
      *
-     * @return bool
-     *
      * @throws \FOSSBilling\Exception
      */
-    public function server_delete($data)
+    public function server_delete($data): bool
     {
         $required = [
             'id' => 'Server id is missing',
@@ -257,11 +277,9 @@ class Admin extends \Api_Abstract
      * @optional bool $secure - flag to define whether to use secure connection (https) to server or not (http)
      * @optional bool $active - flag to enable/disable server
      *
-     * @return bool
-     *
      * @throws \FOSSBilling\Exception
      */
-    public function server_update($data)
+    public function server_update($data): bool
     {
         $required = [
             'id' => 'Server id is missing',
@@ -281,11 +299,9 @@ class Admin extends \Api_Abstract
     /**
      * Test connection to server.
      *
-     * @return bool
-     *
      * @throws \FOSSBilling\Exception
      */
-    public function server_test_connection($data)
+    public function server_test_connection($data): bool
     {
         $required = [
             'id' => 'Server id is missing',
@@ -315,8 +331,8 @@ class Admin extends \Api_Abstract
     public function hp_get_list($data)
     {
         [$sql, $params] = $this->getService()->getHpSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
         foreach ($pager['list'] as $key => $item) {
             $model = $this->di['db']->getExistingModelById('ServiceHostingHp', $item['id'], 'Post not found');
             $pager['list'][$key] = $this->getService()->toHostingHpApiArray($model, false, $this->getIdentity());
@@ -328,11 +344,9 @@ class Admin extends \Api_Abstract
     /**
      * Delete hosting plan.
      *
-     * @return bool
-     *
      * @throws \FOSSBilling\InformationException
      */
-    public function hp_delete($data)
+    public function hp_delete($data): bool
     {
         $required = [
             'id' => 'Hosting plan ID is missing',
@@ -377,11 +391,9 @@ class Admin extends \Api_Abstract
      *
      * @optional string $name - hosting plan name. Used as identifier on server
      *
-     * @return bool
-     *
      * @throws \FOSSBilling\Exception
      */
-    public function hp_update($data)
+    public function hp_update($data): bool
     {
         $required = [
             'id' => 'Hosting plan ID is missing',
@@ -402,7 +414,7 @@ class Admin extends \Api_Abstract
      *
      * @throws \FOSSBilling\Exception
      */
-    public function hp_create($data)
+    public function hp_create($data): int
     {
         $required = [
             'name' => 'Hosting plan name is missing',
@@ -414,7 +426,7 @@ class Admin extends \Api_Abstract
         return (int) $service->createHp($data['name'], $data);
     }
 
-    public function _getService($data)
+    public function _getService($data): array
     {
         $required = [
             'order_id' => 'Order ID name is missing',

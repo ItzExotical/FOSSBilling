@@ -10,15 +10,15 @@
             <div class="card-body p-1">
                 <div id="orderManager" class="accordion">
 
-                    {% include 'mod_orderbutton_choose_product.html.twig' %}
+                    {{ include('mod_orderbutton_choose_product.html.twig') }}
 
-                    {% include 'mod_orderbutton_product_configuration.html.twig' %}
+                    {{ include('mod_orderbutton_product_configuration.html.twig') }}
 
                     {% if not client %}
-                        {% include 'mod_orderbutton_client.html.twig' %}
+                        {{ include('mod_orderbutton_client.html.twig') }}
                     {% endif %}
 
-                    {% include 'mod_orderbutton_checkout.html.twig' %}
+                    {{ include('mod_orderbutton_checkout.html.twig') }}
 
                     <div class="accordion-item">
                         <h2 class="accordion-header">
@@ -109,6 +109,8 @@
         FOSSBilling.message("{{ 'You logged in successfully'|trans }}");
         let registerEl = document.getElementById('register');
         new bootstrap.Collapse('#register').hide();
+        document.querySelector("#checkoutButton").hidden = false;
+        document.querySelector("#loginMessage").hidden = true;
         setTimeout(() => {
             registerEl.parentElement.remove();
             new bootstrap.Collapse('#checkout').show();
@@ -128,6 +130,8 @@
                 FOSSBilling.message("{{ 'You logged in successfully'|trans }}");
                 let registerEl = document.getElementById('register');
                 new bootstrap.Collapse('#register').hide();
+                document.querySelector("#checkoutButton").hidden = false;
+                document.querySelector("#loginMessage").hidden = true;
                 setTimeout(() => {
                     registerEl.parentElement.remove();
                     new bootstrap.Collapse('#checkout').show();

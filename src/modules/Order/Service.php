@@ -28,7 +28,7 @@ class Service implements InjectionAwareInterface
         return $this->di;
     }
 
-    public function counter()
+    public function counter(): array
     {
         $sql = '
         SELECT status, COUNT(id) as counter
@@ -50,7 +50,7 @@ class Service implements InjectionAwareInterface
         ];
     }
 
-    public static function onAfterAdminOrderActivate(\Box_Event $event)
+    public static function onAfterAdminOrderActivate(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $order_id = $params['id'];
@@ -75,7 +75,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterAdminOrderRenew(\Box_Event $event)
+    public static function onAfterAdminOrderRenew(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $order_id = $params['id'];
@@ -101,7 +101,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterAdminOrderSuspend(\Box_Event $event)
+    public static function onAfterAdminOrderSuspend(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $order_id = $params['id'];
@@ -127,7 +127,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterAdminOrderUnsuspend(\Box_Event $event)
+    public static function onAfterAdminOrderUnsuspend(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $order_id = $params['id'];
@@ -153,7 +153,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterAdminOrderCancel(\Box_Event $event)
+    public static function onAfterAdminOrderCancel(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $order_id = $params['id'];
@@ -177,7 +177,7 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public static function onAfterAdminOrderUncancel(\Box_Event $event)
+    public static function onAfterAdminOrderUncancel(\Box_Event $event): void
     {
         $params = $event->getParameters();
         $order_id = $params['id'];
@@ -232,11 +232,11 @@ class Service implements InjectionAwareInterface
         return null;
     }
 
-    protected function _getServiceClassName(\Model_ClientOrder $order)
+    protected function _getServiceClassName(\Model_ClientOrder $order): string
     {
         $s = $this->di['tools']->to_camel_case($order->service_type, true);
 
-        return 'Service' . ucfirst($s);
+        return 'Service' . ucfirst((string) $s);
     }
 
     public function getServiceOrder($service)
@@ -253,14 +253,10 @@ class Service implements InjectionAwareInterface
 
     public function getConfig(\Model_ClientOrder $model)
     {
-        if (is_string($model->config) && json_validate($model->config)) {
-            return json_decode($model->config, true);
-        }
-
-        return [];
+        return json_decode($model->config ?? '', true) ?? [];
     }
 
-    public function productHasOrders(\Model_Product $product)
+    public function productHasOrders(\Model_Product $product): bool
     {
         $order = $this->di['db']->findOne('ClientOrder', 'product_id = :product_id', [':product_id' => $product->id]);
 
@@ -280,7 +276,7 @@ class Service implements InjectionAwareInterface
     /**
      * @param string $notes
      */
-    public function saveStatusChange(\Model_ClientOrder $order, $notes = null)
+    public function saveStatusChange(\Model_ClientOrder $order, $notes = null): void
     {
         $os = $this->di['db']->dispense('ClientOrderStatus');
         $os->client_order_id = $order->id;
@@ -298,7 +294,7 @@ class Service implements InjectionAwareInterface
         return $this->di['db']->getAll($query, $bindings);
     }
 
-    public function getSoonExpiringActiveOrdersQuery($data = [])
+    public function getSoonExpiringActiveOrdersQuery($data = []): array
     {
         $systemService = $this->di['mod_service']('system');
         $days_until_expiration = $systemService->getParamValue('invoice_issue_days_before_expire', 14);
@@ -339,11 +335,7 @@ class Service implements InjectionAwareInterface
         $supportService = $this->di['mod_service']('support');
 
         $data = $this->di['db']->toArray($model);
-        if (!empty($model->config) && json_validate($model->config)) {
-            $data['config'] = json_decode($model->config, true);
-        } else {
-            $data['config'] = [];
-        }
+        $data['config'] = json_decode($model->config ?? '', true) ?? [];
         $data['total'] = $this->getTotal($model);
         $data['title'] = $model->title;
         $data['meta'] = $this->di['db']->getAssoc('SELECT name, value FROM client_order_meta WHERE client_order_id = :id', [':id' => $model->id]);
@@ -367,7 +359,7 @@ class Service implements InjectionAwareInterface
         return $data;
     }
 
-    public function getSearchQuery($data)
+    public function getSearchQuery($data): array
     {
         $query = 'SELECT co.* from client_order co
                 LEFT JOIN client c ON c.id = co.client_id
@@ -444,17 +436,17 @@ class Service implements InjectionAwareInterface
 
         if ($created_at) {
             $where[] = "DATE_FORMAT(co.created_at, '%Y-%m-%d') = :created_at";
-            $bindings[':created_at'] = date('Y-m-d', strtotime($created_at));
+            $bindings[':created_at'] = date('Y-m-d', strtotime((string) $created_at));
         }
 
         if ($date_from) {
             $where[] = 'UNIX_TIMESTAMP(co.created_at) >= :date_from';
-            $bindings[':date_from'] = strtotime($date_from);
+            $bindings[':date_from'] = strtotime((string) $date_from);
         }
 
         if ($date_to) {
             $where[] = 'UNIX_TIMESTAMP(co.created_at) <= :date_to';
-            $bindings[':date_to'] = strtotime($date_to);
+            $bindings[':date_to'] = strtotime((string) $date_to);
         }
 
         // smartSearch
@@ -630,9 +622,14 @@ class Service implements InjectionAwareInterface
             $invoice = $invoiceService->generateForOrder($order);
 
             $invoiceService->approveInvoice($invoice, ['id' => $invoice->id, 'use_credits' => true]);
+
+            // mark invoice as paid on creation
+            if (!empty($data['mark_invoice_paid']) && $invoice instanceof \Model_Invoice) {
+                $invoiceService->markAsPaid($invoice);
+            }
         }
 
-        // activate immediately if say so
+        // activate immediately on creation
         if ($activate) {
             try {
                 $this->activateOrder($order);
@@ -659,7 +656,7 @@ class Service implements InjectionAwareInterface
      *
      * @see https://github.com/boxbilling/boxbilling/issues/54
      */
-    public function activateOrderAddons(\Model_ClientOrder $order)
+    public function activateOrderAddons(\Model_ClientOrder $order): bool
     {
         if (!$order->group_master) {
             return false;
@@ -679,7 +676,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function activateOrder(\Model_ClientOrder $order, $data = [])
+    public function activateOrder(\Model_ClientOrder $order, $data = []): bool
     {
         $statues = [
             \Model_ClientOrder::STATUS_PENDING_SETUP,
@@ -754,7 +751,7 @@ class Service implements InjectionAwareInterface
         if ($productModel instanceof \Model_Product) {
             $this->stockSale($productModel, $order->quantity);
         } else {
-            error_log(sprintf('Order without product ID detected Order #%s', $order->id));
+            error_log("Order without product ID detected Order #{$order->id}.");
         }
 
         $this->saveStatusChange($order, 'Order activated');
@@ -804,12 +801,12 @@ class Service implements InjectionAwareInterface
                 return $repo->$action($o, $service);
             }
         }
-        error_log(sprintf('Service %s does not support action %s', $order->service_type, $action));
+        error_log("Service {$order->service_type} does not support action {$action}.");
 
         return null;
     }
 
-    public function stockSale(\Model_Product $product, $qty)
+    public function stockSale(\Model_Product $product, $qty): bool
     {
         if ($product->stock_control) {
             $product->quantity_in_stock -= $qty;
@@ -820,10 +817,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    /**
-     * @return int
-     */
-    public function updatePeriod(\Model_ClientOrder $order, $period)
+    public function updatePeriod(\Model_ClientOrder $order, $period): int
     {
         if (!empty($period)) {
             $period = $this->di['period']($period);
@@ -841,10 +835,7 @@ class Service implements InjectionAwareInterface
         return 0;
     }
 
-    /**
-     * @return int
-     */
-    public function updateOrderMeta(\Model_ClientOrder $order, $meta)
+    public function updateOrderMeta(\Model_ClientOrder $order, $meta): int
     {
         if (!is_array($meta)) {
             return 0;
@@ -871,24 +862,24 @@ class Service implements InjectionAwareInterface
         return 2;
     }
 
-    public function updateOrder(\Model_ClientOrder $order, array $data)
+    public function updateOrder(\Model_ClientOrder $order, array $data): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderUpdate', 'params' => $data]);
         $this->updatePeriod($order, $data['period'] ?? null);
 
         $created_at = $data['created_at'] ?? '';
         if (!empty($created_at)) {
-            $order->created_at = date('Y-m-d H:i:s', strtotime($created_at));
+            $order->created_at = date('Y-m-d H:i:s', strtotime((string) $created_at));
         }
 
         $activated_at = $data['activated_at'] ?? null;
         if (!empty($activated_at)) {
-            $order->activated_at = date('Y-m-d H:i:s', strtotime($activated_at));
+            $order->activated_at = date('Y-m-d H:i:s', strtotime((string) $activated_at));
         }
 
         $expires_at = $data['expires_at'] ?? null;
         if (!empty($expires_at)) {
-            $order->expires_at = date('Y-m-d H:i:s', strtotime($expires_at));
+            $order->expires_at = date('Y-m-d H:i:s', strtotime((string) $expires_at));
         }
         if (empty($expires_at) && !is_null($expires_at)) {
             $order->expires_at = null;
@@ -913,7 +904,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function renewOrder(\Model_ClientOrder $order)
+    public function renewOrder(\Model_ClientOrder $order): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderRenew', 'params' => ['id' => $order->id]]);
 
@@ -938,7 +929,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function renewFromOrder(\Model_ClientOrder $order)
+    public function renewFromOrder(\Model_ClientOrder $order): void
     {
         // renew order, update order history if failure on renewal
         try {
@@ -950,6 +941,13 @@ class Service implements InjectionAwareInterface
             $this->saveStatusChange($order, $e->getMessage());
 
             throw $e;
+        }
+
+        // do not extend renewal date if this is first paid invoice
+        $invoiceService = $this->di['mod_service']('invoice');
+        $paidInvoices = $invoiceService->findPaidInvoicesForOrder($order);
+        if (count($paidInvoices) <= 1) {
+            return;
         }
 
         // set automatic order expiration
@@ -982,7 +980,7 @@ class Service implements InjectionAwareInterface
         $this->saveStatusChange($order, 'Order renewed');
     }
 
-    public function suspendFromOrder(\Model_ClientOrder $order, $reason = null, $skipEvent = false)
+    public function suspendFromOrder(\Model_ClientOrder $order, $reason = null, $skipEvent = false): bool
     {
         if (!$skipEvent) {
             $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderSuspend', 'params' => ['id' => $order->id]]);
@@ -1012,7 +1010,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function unsuspendFromOrder(\Model_ClientOrder $order)
+    public function unsuspendFromOrder(\Model_ClientOrder $order): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderUnsuspend', 'params' => ['id' => $order->id]]);
 
@@ -1034,7 +1032,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function cancelFromOrder(\Model_ClientOrder $order, $reason = null, $skipEvent = false)
+    public function cancelFromOrder(\Model_ClientOrder $order, $reason = null, $skipEvent = false): bool
     {
         if (!$skipEvent) {
             $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderCancel', 'params' => ['id' => $order->id]]);
@@ -1066,7 +1064,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function uncancelFromOrder(\Model_ClientOrder $order)
+    public function uncancelFromOrder(\Model_ClientOrder $order): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderUncancel', 'params' => ['id' => $order->id]]);
 
@@ -1097,7 +1095,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function rmInvoiceItemByOrder(\Model_ClientOrder $order)
+    public function rmInvoiceItemByOrder(\Model_ClientOrder $order): void
     {
         $bindings = [
             ':rel_id' => $order->id,
@@ -1112,12 +1110,12 @@ class Service implements InjectionAwareInterface
         }
     }
 
-    public function rmClientOrderStatusByOrder(\Model_ClientOrder $order)
+    public function rmClientOrderStatusByOrder(\Model_ClientOrder $order): void
     {
         $this->di['db']->exec('Delete FROM client_order_status WHERE client_order_id = :client_order_id', [':client_order_id' => $order->id]);
     }
 
-    public function rmOrder(\Model_ClientOrder $model)
+    public function rmOrder(\Model_ClientOrder $model): void
     {
         if ($model->group_master) {
             // set addons as separate orders
@@ -1131,7 +1129,7 @@ class Service implements InjectionAwareInterface
         $this->di['db']->trash($model);
     }
 
-    public function deleteFromOrder(\Model_ClientOrder $order, bool $forceDelete = false)
+    public function deleteFromOrder(\Model_ClientOrder $order, bool $forceDelete = false): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminOrderDelete', 'params' => ['id' => $order->id]]);
 
@@ -1145,7 +1143,7 @@ class Service implements InjectionAwareInterface
             if (!$forceDelete) {
                 throw $e;
             } else {
-                error_log($e->getMessage() . 'in ' . $e->getFile() . ':' . $e->getFile());
+                error_log("{$e->getMessage()} in {$e->getFile()} : {$e->getFile()}");
             }
         }
 
@@ -1168,7 +1166,7 @@ class Service implements InjectionAwareInterface
         return $this->di['db']->find('ClientOrder', 'status = :status AND expires_at IS NOT NULL AND DATEDIFF(NOW(), expires_at) >= 1 ORDER BY id', $bindings);
     }
 
-    public function batchSuspendExpired()
+    public function batchSuspendExpired(): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminBatchSuspendOrders']);
 
@@ -1194,7 +1192,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function batchCancelSuspended()
+    public function batchCancelSuspended(): bool
     {
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminBatchCancelSuspendedOrders']);
 
@@ -1226,7 +1224,7 @@ class Service implements InjectionAwareInterface
                 $order = $this->di['db']->getExistingModelById('ClientOrder', $orderArr['id'], 'Order not found');
                 $this->cancelFromOrder($order, $reason);
             } catch (\Exception $e) {
-                error_log($e);
+                error_log($e->getMessage());
             }
         }
 
@@ -1237,7 +1235,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function updateOrderConfig(\Model_ClientOrder $order, array $config)
+    public function updateOrderConfig(\Model_ClientOrder $order, array $config): bool
     {
         $oldConfig = $order->config;
 
@@ -1250,7 +1248,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function getOrderStatusSearchQuery($data)
+    public function getOrderStatusSearchQuery($data): array
     {
         $query = 'SELECT * FROM client_order_status';
 
@@ -1274,7 +1272,7 @@ class Service implements InjectionAwareInterface
         return [$query, $bindings];
     }
 
-    public function orderStatusAdd(\Model_ClientOrder $order, $status, $notes = null)
+    public function orderStatusAdd(\Model_ClientOrder $order, $status, $notes = null): bool
     {
         $bean = $this->di['db']->dispense('ClientOrderStatus');
         $bean->client_order_id = $order->id;
@@ -1289,7 +1287,7 @@ class Service implements InjectionAwareInterface
         return true;
     }
 
-    public function orderStatusRm($id)
+    public function orderStatusRm($id): bool
     {
         $orderStatus = $this->di['db']->getExistingModelById('ClientOrderStatus', $id, 'Order history line not found');
 
@@ -1315,13 +1313,13 @@ class Service implements InjectionAwareInterface
         $orderId = $order->id;
         $service = $this->getOrderService($order);
         if (!is_object($service)) {
-            error_log(sprintf('Order #%s has no active service', $orderId));
+            error_log("Order #{$orderId} has no active service.");
 
             return null;
         }
         $srepo = $this->di['mod_service']('service' . $order->service_type);
         if (!method_exists($srepo, 'toApiArray')) {
-            error_log(sprintf('service #%s method toApiArray is missing', $order->service_type));
+            error_log("Service #{$order->service_type} method toApiArray is missing.");
 
             return null;
         }
@@ -1334,14 +1332,14 @@ class Service implements InjectionAwareInterface
         return $model->price * $model->quantity;
     }
 
-    public function setUnpaidInvoice(\Model_ClientOrder $order, \Model_Invoice $proforma)
+    public function setUnpaidInvoice(\Model_ClientOrder $order, \Model_Invoice $proforma): void
     {
         $order->unpaid_invoice_id = $proforma->id;
         $order->updated_at = date('Y-m-d H:i:s');
         $this->di['db']->store($order);
     }
 
-    public function unsetUnpaidInvoice(\Model_ClientOrder $order)
+    public function unsetUnpaidInvoice(\Model_ClientOrder $order): void
     {
         $order->unpaid_invoice_id = null;
         $order->updated_at = date('Y-m-d H:i:s');
@@ -1364,7 +1362,7 @@ class Service implements InjectionAwareInterface
         return null;
     }
 
-    public function rmByClient(\Model_Client $client)
+    public function rmByClient(\Model_Client $client): void
     {
         $sql = 'DELETE FROM client_order WHERE  client_id = :id';
 

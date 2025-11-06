@@ -25,7 +25,7 @@
         "recognised",
         "fordnox",
         "Dockerized",
-        "proccess",
+        "process",
         "unsuspended",
         "admdly",
         "Pictogrammers",
@@ -38,7 +38,13 @@
         "jambroseclarke",
         "Egulias",
         "ICANN",
-        "failovers"
+        "failovers",
+        "Autosize",
+        "analyse",
+        "triaging",
+        "hostable",
+        "cooldown",
+        "ONLYDIR"
     ],
 
     "ignoreWords": [
@@ -289,7 +295,7 @@
         "xaxis",
         "yaxis",
         "susp",
-        "cancelation",
+        "cancellation",
         "inps",
         "ptitle",
         "PLUGINNAME",
@@ -403,7 +409,10 @@
         "Prins",
         "iplookup",
         "DDEV",
-        "CSRF"
+        "CSRF",
+        "undismissed",
+        "filp",
+        "phpunit"
     ],
     "ignorePaths": [
         "tests-legacy/**",
@@ -446,6 +455,7 @@
         "src/.htaccess",
         "phpstan-baseline.neon",
         "Dockerfile",
-        ".ddev/**"
+        ".ddev/**",
+        "LEMP"
     ]
 }

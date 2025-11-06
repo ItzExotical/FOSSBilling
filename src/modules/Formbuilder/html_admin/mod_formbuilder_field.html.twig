@@ -4,7 +4,7 @@
             <form class="modal-content api-form" method="post" action="admin/formbuilder/update_field" name="field_form{{ field.id }}" data-api-reload="1">
                 <div class="modal-header">
                     <h5 class="modal-title">{{ 'Edit field'|trans }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ 'Close'|trans }}"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="CSRFToken" value="{{ CSRFToken }}">
@@ -159,7 +159,7 @@
                                 {% endfor %}
                             {% elseif field.type == "select" %}
                                 <select class="form-select" name="default_value">
-                                    <option value="">Select a default value</option>
+                                    <option value="">{{ 'Select a default value'|trans }}</option>
                                     {% for k,v in field.options %}
                                         <option value="{{ v }}"
                                             {{ (field.default_value == v) ? 'selected' : '' }}>{{ k }}</option>
@@ -178,7 +178,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <a href="#" class="btn btn-link link-secondary" data-bs-dismiss="modal">Cancel</a>
+                    <a href="#" class="btn btn-link link-secondary" data-bs-dismiss="modal">{{ 'Cancel'|trans }}</a>
                     <input type="submit" class="btn btn-primary save-field-form" value="{{ 'Save'|trans }}">
                 </div>
             </form>

@@ -30,9 +30,12 @@ class AdminTest extends \BBTestCase
             ->method('getSearchQuery')
             ->willReturn(['SqlString', []]);
 
-        $paginatorMock = $this->getMockBuilder('\Box_Pagination')->disableOriginalConstructor()->getMock();
+        $paginatorMock = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $paginatorMock->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn([]);
 
         $di = new \Pimple\Container();
@@ -79,7 +82,7 @@ class AdminTest extends \BBTestCase
 
         $serviceMock->expects($this->atLeastOnce())
             ->method('batchConnect')
-            ->willReturn(1);
+            ->willReturn(true);
 
         $di = new \Pimple\Container();
 

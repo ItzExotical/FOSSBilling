@@ -175,9 +175,12 @@ class Api_AdminTest extends \BBTestCase
             ->method('getExistingModelById')
             ->willReturn($model);
 
-        $pager = $this->getMockBuilder('Box_Pagination')->getMock();
+        $pager = $this->getMockBuilder('\\' . \FOSSBilling\Pagination::class)
+        ->onlyMethods(['getPaginatedResultSet'])
+        ->disableOriginalConstructor()
+        ->getMock();
         $pager->expects($this->atLeastOnce())
-            ->method('getSimpleResultSet')
+            ->method('getPaginatedResultSet')
             ->willReturn($willReturn);
 
         $di = new \Pimple\Container();
@@ -285,7 +288,7 @@ class Api_AdminTest extends \BBTestCase
         $this->assertEquals($model->is_default, $returnArr['default']);
     }
 
-    public static function CreateExceptionProvider()
+    public static function CreateExceptionProvider(): array
     {
         $self = new Api_AdminTest('Api_AdminTest');
 
@@ -316,7 +319,7 @@ class Api_AdminTest extends \BBTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('CreateExceptionProvider')]
-    public function testCreateException($data, $getByCodeCalled, $getByCodeReturn, $getAvailableCurrenciesCalled): void
+    public function testCreateException(array $data, \PHPUnit\Framework\MockObject\Rule\InvokedAtLeastOnce $getByCodeCalled, ?\Model_Currency $getByCodeReturn, \PHPUnit\Framework\MockObject\Rule\InvokedCount|\PHPUnit\Framework\MockObject\Rule\InvokedAtLeastOnce $getAvailableCurrenciesCalled): void
     {
         $adminApi = new \Box\Mod\Currency\Api\Admin();
 
@@ -469,7 +472,7 @@ class Api_AdminTest extends \BBTestCase
         $this->assertEquals($result, true);
     }
 
-    public static function SetDefaultExceptionProvider()
+    public static function SetDefaultExceptionProvider(): array
     {
         $self = new Api_AdminTest('Api_AdminTest');
 
@@ -492,7 +495,7 @@ class Api_AdminTest extends \BBTestCase
      * @expectedException \FOSSBilling\Exception
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('SetDefaultExceptionProvider')]
-    public function testSetDefaultException($data, $getByCodeCalled, $getByCodeReturn): void
+    public function testSetDefaultException(array $data, \PHPUnit\Framework\MockObject\Rule\InvokedAtLeastOnce $getByCodeCalled, $getByCodeReturn): void
     {
         $adminApi = new \Box\Mod\Currency\Api\Admin();
 

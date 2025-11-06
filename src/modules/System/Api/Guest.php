@@ -108,6 +108,17 @@ class Guest extends \Api_Abstract
     }
 
     /**
+     * Return the code of the default country, if set.
+     */
+    public function default_country(): ?string
+    {
+        $mod = $this->di['mod']('system');
+        $cfg = $mod->getConfig();
+
+        return $cfg['default_country'];
+    }
+
+    /**
      * Returns system parameter by key.
      *
      * @return string
@@ -155,7 +166,8 @@ class Guest extends \Api_Abstract
     public function paginator($data)
     {
         $midrange = 7;
-        $current_page = $data['page'];
+        $page_param = $data['page_param'] ?? 'page';
+        $current_page = $data[$page_param];
         $limit = $data['per_page'];
         $itemsCount = $data['total'];
 
@@ -190,10 +202,8 @@ class Guest extends \Api_Abstract
 
     /**
      * Get current client locale.
-     *
-     * @return string
      */
-    public function locale()
+    public function locale(): string
     {
         return i18n::getActiveLocale();
     }

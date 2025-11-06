@@ -12,10 +12,20 @@
 namespace Box\Mod\Invoice;
 
 use FOSSBilling\InjectionAwareInterface;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Filesystem\Path;
+use Symfony\Component\Finder\Exception\DirectoryNotFoundException;
+use Symfony\Component\Finder\Finder;
 
 class ServicePayGateway implements InjectionAwareInterface
 {
     protected ?\Pimple\Container $di = null;
+    private readonly Filesystem $filesystem;
+
+    public function __construct()
+    {
+        $this->filesystem = new Filesystem();
+    }
 
     public function setDi(\Pimple\Container $di): void
     {
@@ -27,7 +37,7 @@ class ServicePayGateway implements InjectionAwareInterface
         return $this->di;
     }
 
-    public function getSearchQuery(array $data)
+    public function getSearchQuery(array $data): array
     {
         $sql = 'SELECT *
             FROM pay_gateway
@@ -76,29 +86,40 @@ class ServicePayGateway implements InjectionAwareInterface
             $exists[$row['gateway']] = $row['name'];
         }
 
-        $pattern = PATH_LIBRARY . '/Payment/Adapter/*.php';
+        $finder = new Finder();
+        $finder->files()
+            ->in(Path::join(PATH_LIBRARY, 'Payment', 'Adapter'))
+            ->name('*.php')
+            ->depth('== 0');
+
         $adapters = [];
-        foreach (glob($pattern) as $path) {
-            $adapter = pathinfo($path, PATHINFO_FILENAME);
+        foreach ($finder as $file) {
+            $adapter = $file->getFilenameWithoutExtension();
             if (!array_key_exists($adapter, $exists)) {
                 $adapters[] = $adapter;
             }
         }
-        $pattern = PATH_LIBRARY . '/Payment/Adapter/*/*.php';
-        foreach (glob($pattern) as $path) {
-            $directory = explode('/', pathinfo($path, PATHINFO_DIRNAME));
-            $adapter = end($directory);
-            if (!array_key_exists($adapter, $exists)) {
-                if ($path == PATH_LIBRARY . '/Payment/Adapter/' . $adapter . '/' . $adapter . '.php') {
+
+        try {
+            $subFinder = new Finder();
+            $subFinder->files()
+                ->in(Path::join(PATH_LIBRARY, 'Payment', 'Adapter', '*'))
+                ->name('*.php')
+                ->depth('== 0');
+            foreach ($subFinder as $file) {
+                $adapter = $file->getFilenameWithoutExtension();
+                if (!array_key_exists($adapter, $exists)) {
                     $adapters[] = $adapter;
                 }
             }
+        } catch (DirectoryNotFoundException) {
+            // If the subdirectory does not exist, ignore the exception.
         }
 
         return $adapters;
     }
 
-    public function install($code)
+    public function install($code): bool
     {
         $available = $this->getAvailable();
         if (!in_array($code, $available)) {
@@ -135,11 +156,7 @@ class ServicePayGateway implements InjectionAwareInterface
         if ($identity instanceof \Model_Admin) {
             $result['supports_one_time_payments'] = $single;
             $result['supports_subscriptions'] = $recurrent;
-            if (!empty($model->config) && json_validate($model->config)) {
-                $result['config'] = json_decode($model->config, true);
-            } else {
-                $result['config'] = [];
-            }
+            $result['config'] = json_decode($model->config ?? '', true) ?? [];
             $result['form'] = $this->getFormElements($model);
             $result['description'] = $this->getDescription($model);
             $result['enabled'] = $model->enabled;
@@ -150,7 +167,7 @@ class ServicePayGateway implements InjectionAwareInterface
         return $result;
     }
 
-    public function copy(\Model_PayGateway $model)
+    public function copy(\Model_PayGateway $model): int
     {
         $new = $this->di['db']->dispense('PayGateway');
         $new->name = $model->name . ' (Copy)';
@@ -165,7 +182,7 @@ class ServicePayGateway implements InjectionAwareInterface
         return $newId;
     }
 
-    public function update(\Model_PayGateway $model, array $data)
+    public function update(\Model_PayGateway $model, array $data): bool
     {
         $model->name = $data['title'] ?? $model->name;
         if (isset($data['config']) && is_array($data['config'])) {
@@ -186,7 +203,7 @@ class ServicePayGateway implements InjectionAwareInterface
         return true;
     }
 
-    public function delete(\Model_PayGateway $model)
+    public function delete(\Model_PayGateway $model): bool
     {
         $id = $model->id;
         $this->di['db']->trash($model);
@@ -210,20 +227,13 @@ class ServicePayGateway implements InjectionAwareInterface
             } else {
                 $gateway = $this->toApiArray($gtw);
                 $adapter = $this->getPaymentAdapter($gtw);
-                if (array_key_exists('logo', $adapter->getConfig())) {
-                    $gateway['logo'] = $adapter->getConfig()['logo'];
-                    if (file_exists(PATH_LIBRARY . '/Payment/Adapter/' . $adapter->getConfig()['logo']['logo'])) {
-                        $gateway['logo']['logo'] = $this->di['tools']->url('/library/Payment/Adapter/' . $adapter->getConfig()['logo']['logo']);
-                    } else {
-                        if (file_exists(PATH_DATA . '/assets/gateways/' . $adapter->getConfig()['logo']['logo'])) {
-                            $gateway['logo']['logo'] = $this->di['tools']->url('/data/assets/gateways/' . $adapter->getConfig()['logo']['logo']);
-                        } else {
-                            $gateway['logo']['logo'] = $this->di['tools']->url('/data/assets/gateways/default.png');
-                        }
-                    }
-                } else {
-                    $gateway['logo']['logo'] = $this->di['tools']->url('/data/assets/gateways/default.png');
+                $config = $adapter->getConfig();
+
+                if (!empty($config['logo'])) {
+                    $gateway['logo'] = $config['logo'];
+                    $gateway['logo']['logo'] = $this->resolveGatewayLogo($config['logo']);
                 }
+
                 $result[] = $gateway;
             }
         }
@@ -231,18 +241,32 @@ class ServicePayGateway implements InjectionAwareInterface
         return $result;
     }
 
-    public function canPerformRecurrentPayment(\Model_PayGateway $model)
+    public function resolveGatewayLogo(array $logoConfig): string
+    {
+        $filename = $logoConfig['logo'] ?? 'default.png';
+
+        $libraryPath = Path::join(PATH_LIBRARY, 'Payment', 'Adapter', $filename);
+        $dataPath = Path::join(PATH_DATA, 'assets', 'gateways', $filename);
+
+        if ($this->filesystem->exists($libraryPath)) {
+            return $this->di['tools']->url("/library/Payment/Adapter/{$filename}");
+        }
+
+        if ($this->filesystem->exists($dataPath)) {
+            return $this->di['tools']->url("/data/assets/gateways/{$filename}");
+        }
+
+        return $this->di['tools']->url('/data/assets/gateways/default.png');
+    }
+
+    public function canPerformRecurrentPayment(\Model_PayGateway $model): bool
     {
         return (bool) $model->allow_recurrent;
     }
 
-    public function getPaymentAdapter(\Model_PayGateway $pg, ?\Model_Invoice $model = null, $optional = [])
+    public function getPaymentAdapter(\Model_PayGateway $pg, ?\Model_Invoice $model = null, $optional = []): object
     {
-        if (is_string($pg->config) && json_validate($pg->config)) {
-            $config = json_decode($pg->config, true);
-        } else {
-            $config = [];
-        }
+        $config = json_decode($pg->config ?? '', true) ?? [];
         $defaults = [];
         $defaults['auto_redirect'] = false;
         $defaults['test_mode'] = $pg->test_mode;
@@ -253,8 +277,8 @@ class ServicePayGateway implements InjectionAwareInterface
         $defaults['continue_shopping_url'] = $this->di['tools']->url('/order');
         $defaults['single_page'] = true;
         if ($model instanceof \Model_Invoice) {
-            $defaults['thankyou_url'] = $this->di['url']->link('/invoice/thank-you/' . $model->hash, ['restore_session' => session_id()]);
-            $defaults['invoice_url'] = $this->di['tools']->url('/invoice/' . $model->hash);
+            $defaults['thankyou_url'] = $this->di['url']->link("/invoice/thank-you/{$model->hash}", ['restore_session' => session_id()]);
+            $defaults['invoice_url'] = $this->di['tools']->url("/invoice/{$model->hash}");
         }
 
         if (isset($optional['auto_redirect'])) {
@@ -267,7 +291,7 @@ class ServicePayGateway implements InjectionAwareInterface
         $class = $this->getAdapterClassName($pg);
 
         if (!class_exists($class)) {
-            throw new \FOSSBilling\Exception('Payment gateway :adapter was not found', [':adapter' => $class]);
+            throw new \FOSSBilling\Exception('Payment gateway :adapter was not found.', [':adapter' => $class]);
         }
 
         $adapter = new $class($config);
@@ -279,7 +303,7 @@ class ServicePayGateway implements InjectionAwareInterface
         return $adapter;
     }
 
-    private function _getAllowTuple(\Model_PayGateway $model)
+    private function _getAllowTuple(\Model_PayGateway $model): array
     {
         $adapter_config = $this->getAdapterConfig($model);
         $single = $adapter_config['supports_one_time_payments'] ?? false;
@@ -291,11 +315,11 @@ class ServicePayGateway implements InjectionAwareInterface
         ];
     }
 
-    public function getAdapterConfig(\Model_PayGateway $pg)
+    public function getAdapterConfig(\Model_PayGateway $pg): array
     {
         $class = $this->getAdapterClassName($pg);
-        if (!file_exists(PATH_LIBRARY . '/Payment/Adapter/' . $pg->gateway . '.php')) {
-            if (!file_exists(PATH_LIBRARY . '/Payment/Adapter/' . $pg->gateway . '/' . $pg->gateway . '.php')) {
+        if (!$this->filesystem->exists(Path::join(PATH_LIBRARY, 'Payment', 'Adapter', "{$pg->gateway}.php"))) {
+            if (!$this->filesystem->exists(Path::join(PATH_LIBRARY, 'Payment', 'Adapter', $pg->gateway, "{$pg->gateway}.php"))) {
                 throw new \FOSSBilling\Exception('Payment gateway :adapter was not found', [':adapter' => $pg->gateway]);
             }
         }
@@ -313,19 +337,19 @@ class ServicePayGateway implements InjectionAwareInterface
         return call_user_func([$class, 'getConfig']);
     }
 
-    public function getAdapterClassName(\Model_PayGateway $pg)
+    public function getAdapterClassName(\Model_PayGateway $pg): string
     {
-        $class = sprintf('Payment_Adapter_%s', $pg->gateway);
-        if (!class_exists($class)) {
-            include PATH_LIBRARY . '/Payment/Adapter/' . $pg->gateway . '/' . $pg->gateway . '.php';
+        $class = "Payment_Adapter_{$pg->gateway}";
 
-            return sprintf('Payment_Adapter_%s', $pg->gateway);
-        } else {
-            return $class;
+        if (!class_exists($class)) {
+            $file = Path::join(PATH_LIBRARY, 'Payment', 'Adapter', $pg->gateway, "{$pg->gateway}.php");
+            include $file;
         }
+
+        return $class;
     }
 
-    public function getAcceptedCurrencies(\Model_PayGateway $model)
+    public function getAcceptedCurrencies(\Model_PayGateway $model): array
     {
         if ($model->accepted_currencies === null || empty($model->accepted_currencies)) {
             $currencyService = $this->di['mod_service']('Currency');
@@ -333,10 +357,10 @@ class ServicePayGateway implements InjectionAwareInterface
             return array_keys($currencyService->getPairs());
         }
 
-        return json_decode($model->accepted_currencies, 1);
+        return json_decode($model->accepted_currencies ?? '', true);
     }
 
-    public function getFormElements(\Model_PayGateway $model)
+    public function getFormElements(\Model_PayGateway $model): array
     {
         $config = $this->getAdapterConfig($model);
         if (isset($config['form']) && is_array($config['form'])) {
@@ -346,7 +370,7 @@ class ServicePayGateway implements InjectionAwareInterface
         return [];
     }
 
-    public function getDescription(\Model_PayGateway $model)
+    public function getDescription(\Model_PayGateway $model): ?string
     {
         $config = $this->getAdapterConfig($model);
 
@@ -356,7 +380,7 @@ class ServicePayGateway implements InjectionAwareInterface
     /**
      * @param \Model_Invoice $model
      */
-    public function getCallbackUrl(\Model_PayGateway $pg, $model = null)
+    public function getCallbackUrl(\Model_PayGateway $pg, $model = null): string
     {
         $p = [
             'gateway_id' => $pg->id,
@@ -371,10 +395,10 @@ class ServicePayGateway implements InjectionAwareInterface
     /**
      * @param \Model_Invoice $model
      */
-    private function getReturnUrl(\Model_PayGateway $pg, $model = null)
+    private function getReturnUrl(\Model_PayGateway $pg, $model = null): string
     {
         if ($model instanceof \Model_Invoice) {
-            return $this->di['url']->link('/invoice/' . $model->hash, ['status' => 'ok', 'restore_session' => session_id()]);
+            return $this->di['url']->link("/invoice/{$model->hash}", ['status' => 'ok', 'restore_session' => session_id()]);
         }
 
         return $this->di['url']->link('/invoice', ['status' => 'ok', 'restore_session' => session_id()]);
@@ -383,10 +407,10 @@ class ServicePayGateway implements InjectionAwareInterface
     /**
      * @param \Model_Invoice $model
      */
-    private function getCancelUrl(\Model_PayGateway $pg, $model = null)
+    private function getCancelUrl(\Model_PayGateway $pg, $model = null): string
     {
         if ($model instanceof \Model_Invoice) {
-            return $this->di['url']->link('/invoice/' . $model->hash, ['status' => 'cancel', 'restore_session' => session_id()]);
+            return $this->di['url']->link("/invoice/{$model->hash}", ['status' => 'cancel', 'restore_session' => session_id()]);
         }
 
         return $this->di['url']->link('/invoice', ['status' => 'cancel', 'restore_session' => session_id()]);
@@ -395,7 +419,7 @@ class ServicePayGateway implements InjectionAwareInterface
     /**
      * @param \Model_Invoice $model
      */
-    private function getCallbackRedirect(\Model_PayGateway $pg, $model = null)
+    private function getCallbackRedirect(\Model_PayGateway $pg, $model = null): string
     {
         $p = [
             'gateway_id' => $pg->id,

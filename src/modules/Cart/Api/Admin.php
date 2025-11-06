@@ -24,8 +24,8 @@ class Admin extends \Api_Abstract
     public function get_list($data)
     {
         [$sql, $params] = $this->getService()->getSearchQuery($data);
-        $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
-        $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
+        $per_page = $data['per_page'] ?? $this->di['pager']->getDefaultPerPage();
+        $pager = $this->di['pager']->getPaginatedResultSet($sql, $params, $per_page);
 
         foreach ($pager['list'] as $key => $cartArr) {
             $cart = $this->di['db']->getExistingModelById('Cart', $cartArr['id'], 'Cart not found');
@@ -58,10 +58,8 @@ class Admin extends \Api_Abstract
      * Remove shopping carts that are older than a week and was not ordered.
      *
      * @BOXBILLING_CRON
-     *
-     * @return bool
      */
-    public function batch_expire($data)
+    public function batch_expire($data): bool
     {
         $this->di['logger']->info('Executed action to clear expired shopping carts from database');
 

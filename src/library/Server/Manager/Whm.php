@@ -85,7 +85,7 @@ class Server_Manager_Whm extends Server_Manager
     public function getLoginUrl(?Server_Account $account = null): string
     {
         if ($account) {
-            // API action for creating a user session
+            $action = 'create_user_session';
             $params = [
                 'api.version' => 2,
                 'user' => $account->getUsername(),
@@ -93,9 +93,7 @@ class Server_Manager_Whm extends Server_Manager
             ];
 
             try {
-                // Call the request function
                 $response = $this->request($action, $params);
-                // Check if the response is an object and access it accordingly
                 if (isset($response->data->url)) {
                     return $response->data->url;
                 } else {
@@ -104,7 +102,7 @@ class Server_Manager_Whm extends Server_Manager
                     return 'https://' . $this->_config['host'] . '/cpanel';
                 }
             } catch (Server_Exception $e) {
-                $this->getLog()->err('Failed to get login URL: ' . $e->getMessage());
+                $this->getLog()->err("Failed to get login URL: {$e->getMessage()}.");
 
                 return 'https://' . $this->_config['host'] . '/cpanel';
             }
@@ -143,7 +141,7 @@ class Server_Manager_Whm extends Server_Manager
                     return 'https://' . $this->_config['host'] . '/whm';
                 }
             } catch (Server_Exception $e) {
-                $this->getLog()->err('Failed to get login URL: ' . $e->getMessage());
+                $this->getLog()->err("Failed to get login URL: {$e->getMessage()}.");
 
                 return 'https://' . $this->_config['host'] . '/whm';
             }
@@ -179,7 +177,7 @@ class Server_Manager_Whm extends Server_Manager
      */
     public function generateUsername(string $domain): string
     {
-        $processedDomain = strtolower(preg_replace('/[^A-Za-z0-9]/', '', $domain));
+        $processedDomain = strtolower((string) preg_replace('/[^A-Za-z0-9]/', '', $domain));
         $username = substr($processedDomain, 0, 7) . random_int(0, 9);
 
         // WHM doesn't allow usernames to start with "test", so replace it with a random string if it does (test3456 would then become something like a62f93456).
@@ -608,7 +606,7 @@ class Server_Manager_Whm extends Server_Manager
             ]);
         } catch (HttpExceptionInterface $error) {
             $e = new Server_Exception('HttpClientException: :error', [':error' => $error->getMessage()]);
-            $this->getLog()->err($e);
+            $this->getLog()->err($e->getMessage());
 
             throw $e;
         }
